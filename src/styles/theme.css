@@ -1,0 +1,22 @@
+:root {
+  /* Elden Ring palette */
+  --gold:         #c9a84c;
+  --gold-bright:  #f0d060;
+  --gold-dim:     #7a5c1e;
+  --bg:           #060402;
+  --bg-surface:   #0e0b06;
+  --bg-overlay:   rgba(6, 4, 2, 0.82);
+  --text:         #d4c49a;
+  --text-muted:   #7a6a4a;
+  --text-faint:   #3d3020;
+  --border:       rgba(201, 168, 76, 0.18);
+  --border-bright: rgba(201, 168, 76, 0.55);
+
+  /* Typography */
+  --font-serif:   'Cormorant Garamond', 'Georgia', serif;
+  --font-sans:    'Inter', 'system-ui', sans-serif;
+
+  /* Sizing */
+  --radius:       2px;
+  --transition:   220ms ease;
+}

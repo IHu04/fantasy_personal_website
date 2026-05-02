@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Isaac Hu</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="/src/styles/reset.css" />
+    <link rel="stylesheet" href="/src/styles/theme.css" />
+    <link rel="stylesheet" href="/src/styles/main.css" />
+    <link rel="stylesheet" href="/src/styles/map.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Layer 0: map image -->
+      <div id="map-viewport">
+        <div class="map-layer" id="map-layer">
+          <img
+            id="map-img"
+            src="/assets/map/world-map.png"
+            draggable="false"
+            alt="World map"
+          />
+        </div>
+        <canvas id="glow-canvas"></canvas>
+        <div class="map-vignette"></div>
+      </div>
+
+      <!-- Layer 1: ambient particles -->
+      <canvas id="bg-canvas"></canvas>
+
+      <!-- Layer 2: UI panels -->
+      <main id="viewport">
+        <!-- Content panels are injected by JS -->
+      </main>
+
+      <div class="grace-flash" aria-hidden="true">
+        <div class="grace-flash__text">Lost Grace Discovered</div>
+      </div>
+
+      <div class="return-fade" aria-hidden="true"></div>
+    </div>
+
+    <script type="module" src="/src/scripts/main.js"></script>
+  </body>
+</html>

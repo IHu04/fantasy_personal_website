@@ -808,22 +808,827 @@ class ContactScene extends GraceRegionScene {
   }
 }
 
-class ExperienceScene extends GraceRegionScene {
-  addHeroObject() {
-    super.addHeroObject();
-    const path = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.08, 2.7),
-      new THREE.MeshStandardMaterial({
-        color: this.palette.accent,
-        emissive: this.palette.accent,
-        emissiveIntensity: 0.24,
-        roughness: 0.62,
+// ── Experience timeline content ───────────────────────────────
+// Replace these placeholders with real history; structure is preserved.
+const experienceTimeline = [
+  {
+    year: '2024',
+    title: 'Most Recent Role',
+    body: 'A short paragraph describing the work, the problem space, and what was learned. Update this stone with real details — the carving will follow.',
+  },
+  {
+    year: '2023',
+    title: 'Penultimate Chapter',
+    body: 'Each stone holds a season of work. Replace this with what you actually did, who you did it with, and why it mattered.',
+  },
+  {
+    year: '2022',
+    title: 'A Founding Effort',
+    body: 'A side project or company-shaping initiative. Describe the constraints, the artifact, the outcome — the kind of details a recruiter or collaborator would want.',
+  },
+  {
+    year: '2021',
+    title: 'Earlier Campaign',
+    body: 'Lessons compounded here. Replace with the actual employer, role, scope of impact, and the technical surface you owned.',
+  },
+  {
+    year: '2020',
+    title: 'First Major Post',
+    body: 'The first real engineering role, or the formative project that set the direction. Keep this body 2–4 sentences for legibility on the stone overlay.',
+  },
+  {
+    year: '2018',
+    title: 'Origin · Internship',
+    body: 'Where it began — the internship, lab, or solo build that started the path. Brief, evocative, honest.',
+  },
+];
+
+class ExperienceScene extends RegionScene {
+  group = new THREE.Group();
+
+  // Site of Grace (copied wholesale from LimgraveScene)
+  grace = null;
+  graceLight = null;
+  graceHalo = null;
+  graceFlame = null;
+  gracePool = null;
+
+  // Underwater environment
+  seafloor = null;
+  causticsMaterial = null;
+  godRayGroup = new THREE.Group();
+  godRays = [];
+  bubbles = null;
+  bubbleData = [];
+  motes = null;
+  moteData = [];
+  graceMotes = null;
+  graceMoteData = [];
+
+  // Timeline stones
+  stones = [];          // Array<TimelineStone>
+  hoveredStone = null;
+  focusedStone = null;
+  focusProgress = 0;
+  hasOpenedOverlay = false;
+
+  // Camera focus
+  baseCameraPosition = new THREE.Vector3(0, 2.85, 8.0);
+  baseLookTarget = new THREE.Vector3(0, 0.05, 0.6);
+  currentLookTarget = new THREE.Vector3(0, 0.05, 0.6);
+  focusCameraPosition = new THREE.Vector3();
+  focusLookTarget = new THREE.Vector3();
+
+  stoneOverlay = null;
+
+  init() {
+    this.scene.background = createUnderwaterBackgroundTexture();
+    this.scene.fog = new THREE.FogExp2(0x06202c, 0.058);
+    this.scene.add(this.group);
+    this.group.add(this.godRayGroup);
+
+    this.addLighting();
+    this.addSeafloor();
+    this.addSiteOfGrace();
+    this.addAmbientRocks();
+    this.addTimelineStones();
+    this.addGodRays();
+    this.addBubbles();
+    this.addParticles();
+    this.addHint();
+
+    this.stoneOverlay = createStoneReaderOverlay(() => this.#closeStoneReader());
+  }
+
+  // Floating hint that fades when the user starts interacting
+  addHint() {
+    this.hint = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createHintTexture('Click a stone to read'),
+        transparent: true,
+        opacity: 0.78,
+        depthWrite: false,
       })
     );
-    path.position.set(0, -0.86, 0.35);
-    path.rotation.y = 0.32;
-    this.group.add(path);
+    this.hint.position.set(0, 3.05, 3.0);
+    this.hint.scale.set(1.75, 0.35, 1);
+    this.group.add(this.hint);
   }
+
+  // ── Lighting (filtered submarine sun + cool ambient) ────────
+  addLighting() {
+    const ambient = new THREE.AmbientLight(0x2a5566, 0.72);
+    this.scene.add(ambient);
+
+    // Filtered sunlight from above — pale teal
+    const sun = new THREE.DirectionalLight(0x9bcfe2, 2.05);
+    sun.position.set(1.2, 14, 1.4);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1536, 1536);
+    sun.shadow.camera.left = -10;
+    sun.shadow.camera.right = 10;
+    sun.shadow.camera.top = 10;
+    sun.shadow.camera.bottom = -10;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 28;
+    sun.shadow.bias = -0.00022;
+    sun.shadow.normalBias = 0.02;
+    this.scene.add(sun);
+
+    // Hemisphere — deep blue floor / brighter teal sky
+    const hemi = new THREE.HemisphereLight(0x6ba6c0, 0x081820, 0.92);
+    this.scene.add(hemi);
+
+    // Cool fill from behind to silhouette stones
+    const rim = new THREE.DirectionalLight(0x4a82a0, 0.65);
+    rim.position.set(-3, 4, -6);
+    this.scene.add(rim);
+
+    // Warm bounce from the Grace toward the camera-facing front of stones
+    const graceFill = new THREE.PointLight(0xf0c878, 1.2, 6);
+    graceFill.position.set(0, 1.2, 1.6);
+    this.scene.add(graceFill);
+  }
+
+  // ── Seafloor — sand + animated caustic overlay ──────────────
+  addSeafloor() {
+    const geometry = new THREE.PlaneGeometry(50, 50, 140, 140);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i);
+      const y = position.getY(i);
+      const ripple =
+        Math.sin(x * 0.32) * 0.06 +
+        Math.cos(y * 0.27) * 0.05 +
+        Math.sin((x + y) * 0.12) * 0.04;
+      const dune = Math.sin(x * 0.07 - y * 0.05) * 0.18;
+      const falloff = Math.min(1, Math.hypot(x, y) / 28);
+      position.setZ(i, (ripple + dune) * (0.5 + falloff * 0.5));
+    }
+    geometry.computeVertexNormals();
+    geometry.rotateX(-Math.PI / 2);
+
+    const sandTextures = createSeafloorTextureSet();
+    this.seafloor = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        map: sandTextures.color,
+        roughnessMap: sandTextures.roughness,
+        bumpMap: sandTextures.bump,
+        bumpScale: 0.08,
+        color: 0x4f6470,
+        roughness: 0.96,
+        metalness: 0,
+      })
+    );
+    this.seafloor.position.y = -0.92;
+    this.seafloor.receiveShadow = true;
+    this.group.add(this.seafloor);
+
+    // Animated caustic overlay — additive plane just above the seafloor
+    const causticTex = createCausticsTexture();
+    causticTex.wrapS = causticTex.wrapT = THREE.RepeatWrapping;
+    causticTex.repeat.set(2.6, 2.6);
+    this.causticsMaterial = new THREE.MeshBasicMaterial({
+      map: causticTex,
+      color: 0x9fd0e6,
+      transparent: true,
+      opacity: 0.42,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const causticPlane = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), this.causticsMaterial);
+    causticPlane.rotation.x = -Math.PI / 2;
+    causticPlane.position.y = -0.86;
+    this.group.add(causticPlane);
+  }
+
+  // ── Site of Grace (copied from LimgraveScene) ───────────────
+  addSiteOfGrace() {
+    const gracePosition = new THREE.Vector3(0, 0.98, -2.05);
+
+    this.grace = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 32, 18),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd45a,
+        transparent: true,
+        opacity: 0.64,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    this.grace.position.copy(gracePosition);
+    this.grace.renderOrder = 34;
+    this.group.add(this.grace);
+
+    this.graceLight = new THREE.PointLight(0xffc84d, 9.2, 18);
+    this.graceLight.position.set(gracePosition.x, gracePosition.y + 0.06, gracePosition.z);
+    this.graceLight.castShadow = true;
+    this.group.add(this.graceLight);
+
+    this.gracePool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.4, 64),
+      new THREE.MeshBasicMaterial({
+        map: createLightPoolTexture(),
+        color: 0xffc84d,
+        transparent: true,
+        opacity: 0.62,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    this.gracePool.rotation.x = -Math.PI / 2;
+    this.gracePool.position.set(gracePosition.x, -0.84, gracePosition.z);
+    this.gracePool.scale.setScalar(1.78);
+    this.gracePool.renderOrder = 18;
+    this.group.add(this.gracePool);
+
+    this.graceFlame = new THREE.Group();
+    this.graceFlame.position.set(gracePosition.x, gracePosition.y - 0.2, gracePosition.z);
+    this.graceFlame.scale.setScalar(1.18);
+    const flameTexture = createGraceFlameTexture();
+    const wisps = [
+      { x: 0, y: -0.44, z: 0, sx: 0.42, sy: 1.55, opacity: 0.58, phase: 2.6, speed: 0.95 },
+      { x: 0, y: -0.04, z: 0, sx: 0.58, sy: 1.12, opacity: 0.56, phase: 5.2, speed: 1.05 },
+      { x: 0, y: 0.2, z: 0, sx: 0.44, sy: 1.74, opacity: 0.95, phase: 0, speed: 1.2 },
+      { x: -0.04, y: 0.16, z: 0.03, sx: 0.31, sy: 1.44, opacity: 0.64, phase: 1.7, speed: 1.6 },
+      { x: 0.05, y: 0.13, z: -0.02, sx: 0.25, sy: 1.22, opacity: 0.5, phase: 3.1, speed: 1.45 },
+      { x: 0.02, y: 0.38, z: 0.01, sx: 0.18, sy: 0.78, opacity: 0.5, phase: 4.4, speed: 1.9 },
+    ];
+
+    for (const wisp of wisps) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: flameTexture,
+          color: 0xffd76a,
+          transparent: true,
+          opacity: wisp.opacity,
+          blending: THREE.AdditiveBlending,
+          depthTest: false,
+          depthWrite: false,
+        })
+      );
+      sprite.position.set(wisp.x, wisp.y, wisp.z);
+      sprite.scale.set(wisp.sx, wisp.sy, 1);
+      sprite.renderOrder = 36;
+      sprite.userData = {
+        baseX: wisp.x,
+        baseY: wisp.y,
+        baseScaleX: wisp.sx,
+        baseScaleY: wisp.sy,
+        baseOpacity: wisp.opacity,
+        phase: wisp.phase,
+        speed: wisp.speed,
+      };
+      this.graceFlame.add(sprite);
+    }
+    this.graceFlame.renderOrder = 36;
+    this.group.add(this.graceFlame);
+  }
+
+  // ── Background rocks (set dressing, non-interactive) ────────
+  // CRITICAL: nothing on the camera→Grace sightline (x≈0, z<-1).
+  // The Grace sits at (0, ~0.5, -2.4); leave a clear corridor behind it.
+  addAmbientRocks() {
+    const material = createRockMaterial();
+    material.color.setHex(0x4a5a5e);
+    const random = seededRandom(9187);
+    const placements = [];
+
+    for (let attempts = 0; placements.length < 16 && attempts < 140; attempts++) {
+      const z = THREE.MathUtils.lerp(-7.4, -1.35, random());
+      const distanceFade = THREE.MathUtils.clamp((z + 7.4) / 6.05, 0, 1);
+      const maxX = THREE.MathUtils.lerp(7.9, 6.1, distanceFade);
+      const x = (random() * 2 - 1) * maxX;
+
+      // Keep the Grace and timeline readable. These rocks are water set dressing,
+      // so they stay behind the timeline arc instead of touching the carved stones.
+      const blocksGrace = z > -4.8 && Math.abs(x) < 2.75;
+      const blocksTimeline = z > -2.35 && Math.abs(x) < 5.55;
+      if (blocksGrace || blocksTimeline) continue;
+
+      const y = THREE.MathUtils.lerp(-0.9, -0.72, random());
+      const scale = THREE.MathUtils.lerp(0.2, 0.8, random()) * THREE.MathUtils.lerp(0.82, 1.08, distanceFade);
+      placements.push([x, y, z, scale]);
+    }
+
+    placements.forEach(([x, y, z, scale], index) => {
+      const rock = new THREE.Mesh(createWeatheredRockGeometry(311 + index * 23), material);
+      const squash = 0.42 + random() * 0.3;
+      const width = 0.95 + random() * 0.65;
+      const depth = 0.72 + random() * 0.56;
+      rock.position.set(x, y, z);
+      rock.rotation.set(
+        index * 0.41 + (random() - 0.5) * 0.7,
+        index * 1.83 + (random() - 0.5) * 1.4,
+        -0.12 + index * 0.09 + (random() - 0.5) * 0.4
+      );
+      rock.scale.set(scale * width, scale * squash, scale * depth);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      this.group.add(rock);
+    });
+  }
+
+  // ── Timeline stones — clickable carved monuments ────────────
+  // Stones lay out in a gentle left-to-right arc in front of the Grace,
+  // each tilted forward so the etched top reads cleanly to the camera.
+  addTimelineStones() {
+    const baseRockMaterial = createRockMaterial();
+    baseRockMaterial.color.setHex(0x576668);
+
+    const xSpread   = 4.4;     // half-width of the stone row
+    const zCloser   = 1.4;     // outer stones (sides) sit closer to camera
+    const zCenter   = 0.2;     // middle stones sit deeper, near Grace
+    const forwardTilt = 0.18;  // ~10° forward — tops face camera
+
+    experienceTimeline.forEach((entry, index) => {
+      const t = experienceTimeline.length === 1
+        ? 0.5
+        : index / (experienceTimeline.length - 1);
+      const offset  = (t - 0.5) * 2;          // -1..+1
+      const x = offset * xSpread;
+      // Cosine-shaped depth curve: middle is furthest back, ends are closer
+      const depthCurve = Math.cos(offset * Math.PI * 0.5);
+      const z = THREE.MathUtils.lerp(zCloser, zCenter, depthCurve);
+      // Slight rotation so each stone faces the camera (origin-pointed)
+      const yaw = -Math.atan2(x, 4.8 - z) * 0.6;
+
+      const stone = new TimelineStone(entry, baseRockMaterial, 200 + index * 19);
+      stone.position.set(x, -0.6, z);
+      stone.rotation.set(forwardTilt, yaw, 0);
+      stone.userData.entry = entry;
+      stone.userData.clickable = true;
+      this.stones.push(stone);
+      this.group.add(stone);
+    });
+  }
+
+  // ── God rays — soft additive cones from above ───────────────
+  addGodRays() {
+    const rayMaterial = new THREE.MeshBasicMaterial({
+      map: createGodRayTexture(),
+      color: 0x9ed4eb,
+      transparent: true,
+      opacity: 0.18,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    for (let i = 0; i < 5; i++) {
+      const ray = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 12), rayMaterial.clone());
+      const angle = (i / 5) * Math.PI * 2 + Math.random() * 0.4;
+      const radius = 1.8 + Math.random() * 2.4;
+      ray.position.set(Math.cos(angle) * radius, 4.5, Math.sin(angle) * radius - 1.5);
+      ray.rotation.set(0.18, angle + Math.PI, (Math.random() - 0.5) * 0.18);
+      ray.userData = { phase: Math.random() * Math.PI * 2, baseOpacity: 0.14 + Math.random() * 0.1 };
+      ray.material.opacity = ray.userData.baseOpacity;
+      this.godRays.push(ray);
+      this.godRayGroup.add(ray);
+    }
+  }
+
+  // ── Bubbles drifting upward ─────────────────────────────────
+  addBubbles() {
+    const count = 32;
+    const positions = new Float32Array(count * 3);
+    this.bubbleData = [];
+    for (let i = 0; i < count; i++) {
+      const radius = 1.5 + Math.random() * 4.5;
+      const angle = Math.random() * Math.PI * 2;
+      const y = -0.7 + Math.random() * 4.0;
+      positions[i * 3] = Math.cos(angle) * radius;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = Math.sin(angle) * radius - 1.0;
+      this.bubbleData.push({
+        baseX: Math.cos(angle) * radius,
+        baseZ: Math.sin(angle) * radius - 1.0,
+        speed: 0.12 + Math.random() * 0.18,
+        wobble: Math.random() * Math.PI * 2,
+        wobbleAmp: 0.04 + Math.random() * 0.06,
+      });
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.bubbles = new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        color: 0xc9e6f2,
+        size: 0.06,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.group.add(this.bubbles);
+  }
+
+  // ── Suspended motes / plankton ──────────────────────────────
+  addParticles() {
+    const count = 110;
+    const positions = new Float32Array(count * 3);
+    this.moteData = [];
+    for (let i = 0; i < count; i++) {
+      const x = (Math.random() - 0.5) * 14;
+      const y = -0.4 + Math.random() * 4.5;
+      const z = -3 + (Math.random() - 0.5) * 9;
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+      this.moteData.push({
+        baseX: x, baseY: y, baseZ: z,
+        speedX: (Math.random() - 0.5) * 0.06,
+        speedY: 0.02 + Math.random() * 0.04,
+        wobble: Math.random() * Math.PI * 2,
+      });
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.motes = new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        color: 0x86b8c8,
+        size: 0.022,
+        transparent: true,
+        opacity: 0.62,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.group.add(this.motes);
+
+    const graceCount = 46;
+    const gracePositions = new Float32Array(graceCount * 3);
+    this.graceMoteData = [];
+    for (let i = 0; i < graceCount; i++) {
+      const radius = 0.16 + Math.random() * 0.9;
+      const angle = Math.random() * Math.PI * 2;
+      const y = -0.58 + Math.random() * 2.35;
+      const x = Math.cos(angle) * radius * 0.62;
+      const z = -2.05 + Math.sin(angle) * radius * 0.28;
+      gracePositions[i * 3] = x;
+      gracePositions[i * 3 + 1] = 0.98 + y;
+      gracePositions[i * 3 + 2] = z;
+      this.graceMoteData.push({
+        angle,
+        radius,
+        y,
+        speed: 0.22 + Math.random() * 0.34,
+        wobble: Math.random() * Math.PI * 2,
+      });
+    }
+
+    const graceGeometry = new THREE.BufferGeometry();
+    graceGeometry.setAttribute('position', new THREE.BufferAttribute(gracePositions, 3));
+    this.graceMotes = new THREE.Points(
+      graceGeometry,
+      new THREE.PointsMaterial({
+        color: 0xffd060,
+        size: 0.04,
+        transparent: true,
+        opacity: 0.88,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    this.graceMotes.renderOrder = 38;
+    this.group.add(this.graceMotes);
+  }
+
+  getCameraConfig() {
+    return {
+      position: [0, 2.85, 8.0],
+      target: [0, 0.05, 0.6],
+      orbitRadius: 0,
+      orbitSpeed: 0,
+      mouseInfluence: 0.26,   // gentle swing — keep timeline stable
+      bobAmount: 0.022,       // gentle underwater sway
+      bobSpeed: 0.32,
+    };
+  }
+
+  update(t, dt) {
+    super.update(t, dt);
+
+    // Caustics scroll
+    if (this.causticsMaterial?.map) {
+      this.causticsMaterial.map.offset.x = (t * 0.012) % 1;
+      this.causticsMaterial.map.offset.y = (t * 0.008) % 1;
+      this.causticsMaterial.opacity = 0.36 + Math.sin(t * 0.7) * 0.06;
+    }
+
+    // Grace
+    const graceBaseY = 0.98;
+    const graceZ = -2.05;
+    const pulse = 1 + Math.sin(t * 2.4) * 0.12;
+    this.grace.scale.setScalar(pulse);
+    this.grace.position.set(0, graceBaseY + Math.sin(t * 1.7) * 0.025, graceZ);
+    this.graceLight.position.set(0, this.grace.position.y + 0.06, graceZ);
+    this.graceFlame.position.set(0, this.grace.position.y - 0.2, graceZ);
+    this.gracePool.position.set(0, -0.84, graceZ);
+    this.gracePool.scale.setScalar(1.78 + Math.sin(t * 1.25) * 0.08);
+    this.gracePool.material.opacity = 0.52 + Math.sin(t * 1.5) * 0.06;
+    this.graceLight.intensity = 10.2 + Math.sin(t * 2.2) * 1.2;
+
+    for (const sprite of this.graceFlame.children) {
+      const data = sprite.userData;
+      const sway = Math.sin(t * data.speed + data.phase);
+      const breath = Math.sin(t * (data.speed + 0.4) + data.phase * 0.7);
+      sprite.position.x = data.baseX + sway * 0.035;
+      sprite.position.y = data.baseY + breath * 0.035;
+      sprite.scale.set(
+        data.baseScaleX * (1 + breath * 0.12),
+        data.baseScaleY * (1 + sway * 0.08),
+        1
+      );
+      sprite.material.opacity = data.baseOpacity + breath * 0.08;
+    }
+
+    // Stones — gentle bob + hover/focus glow modulation
+    for (const stone of this.stones) {
+      stone.update(t, this.hoveredStone === stone, this.focusedStone === stone);
+    }
+
+    // Hint fades while a stone is focused, breathes otherwise
+    if (this.hint) {
+      const targetOpacity = this.focusedStone ? 0 : (0.7 + Math.sin(t * 1.6) * 0.12);
+      this.hint.material.opacity = THREE.MathUtils.lerp(
+        this.hint.material.opacity,
+        targetOpacity,
+        0.06
+      );
+    }
+
+    // God rays — sway + pulse
+    for (const ray of this.godRays) {
+      ray.material.opacity = ray.userData.baseOpacity * (0.7 + Math.sin(t * 0.4 + ray.userData.phase) * 0.3);
+      ray.rotation.z = Math.sin(t * 0.18 + ray.userData.phase) * 0.06;
+    }
+
+    // Bubbles
+    if (this.bubbles) {
+      const positions = this.bubbles.geometry.attributes.position;
+      for (let i = 0; i < this.bubbleData.length; i++) {
+        const b = this.bubbleData[i];
+        let y = positions.getY(i) + b.speed * dt;
+        if (y > 4.2) y = -0.85;
+        const wobbleX = Math.sin(t * 1.4 + b.wobble) * b.wobbleAmp;
+        const wobbleZ = Math.cos(t * 1.1 + b.wobble) * b.wobbleAmp;
+        positions.setXYZ(i, b.baseX + wobbleX, y, b.baseZ + wobbleZ);
+      }
+      positions.needsUpdate = true;
+    }
+
+    // Motes
+    if (this.motes) {
+      const positions = this.motes.geometry.attributes.position;
+      for (let i = 0; i < this.moteData.length; i++) {
+        const m = this.moteData[i];
+        let x = positions.getX(i) + m.speedX * dt;
+        let y = positions.getY(i) + m.speedY * dt;
+        if (y > 4.2) y = -0.45;
+        if (x > 7.5) x = -7.5;
+        if (x < -7.5) x = 7.5;
+        const wobble = Math.sin(t * 0.7 + m.wobble) * 0.018;
+        positions.setXYZ(i, x + wobble, y, m.baseZ);
+      }
+      positions.needsUpdate = true;
+    }
+
+    if (this.graceMotes) {
+      const positions = this.graceMotes.geometry.attributes.position;
+      for (let i = 0; i < this.graceMoteData.length; i++) {
+        const mote = this.graceMoteData[i];
+        mote.y += dt * mote.speed;
+        if (mote.y > 1.78) mote.y = -0.58;
+
+        const angle = mote.angle + t * 0.26;
+        const wobble = Math.sin(t * 1.45 + mote.wobble) * 0.07;
+        positions.setXYZ(
+          i,
+          Math.cos(angle) * (mote.radius + wobble) * 0.62,
+          0.98 + mote.y,
+          graceZ + Math.sin(angle) * (mote.radius + wobble) * 0.28
+        );
+      }
+      positions.needsUpdate = true;
+      this.graceMotes.material.opacity = 0.74 + Math.sin(t * 1.8) * 0.1;
+    }
+
+    this.#updateFocusFade(dt);
+
+    if (this.focusProgress > 0.001 && this.cameraRig) {
+      const camera = this.cameraRig.camera;
+      const eased = smootherStep(this.focusProgress);
+      const lookEase = smootherStep(Math.max(0, this.focusProgress - 0.08) / 0.92);
+      const rigPosition = camera.position.clone();
+      camera.position.lerpVectors(rigPosition, this.focusCameraPosition, eased);
+      this.currentLookTarget.lerpVectors(this.baseLookTarget, this.focusLookTarget, lookEase);
+      camera.lookAt(this.currentLookTarget);
+    } else {
+      this.currentLookTarget.copy(this.baseLookTarget);
+    }
+  }
+
+  getInteractiveObjects() {
+    return this.stones.map((s) => s.hitbox).filter(Boolean);
+  }
+
+  handleSceneClick(hit) {
+    const stone = this.#stoneFromHit(hit);
+    if (stone) {
+      this.#openStoneReader(stone);
+    } else {
+      this.#closeStoneReader();
+    }
+  }
+
+  handleSceneMiss() {
+    this.#closeStoneReader();
+  }
+
+  handleSceneHover(hit) {
+    this.hoveredStone = this.#stoneFromHit(hit) ?? null;
+  }
+
+  exit() {
+    this.#closeStoneReader();
+    this.focusProgress = 0;
+    super.exit();
+  }
+
+  dispose() {
+    this.stoneOverlay?.remove();
+    super.dispose();
+  }
+
+  #stoneFromHit(hit) {
+    if (!hit) return null;
+    let object = hit.object;
+    while (object) {
+      if (object.userData?.stone) return object.userData.stone;
+      if (this.stones.includes(object)) return object;
+      object = object.parent;
+    }
+    return null;
+  }
+
+  #openStoneReader(stone) {
+    this.focusedStone = stone;
+    this.hasOpenedOverlay = false;
+
+    // Compute focus camera pose: ~1.6m away from stone, 0.6m above, looking at it
+    const stonePos = new THREE.Vector3();
+    stone.getWorldPosition(stonePos);
+    const toCamera = new THREE.Vector3().subVectors(this.baseCameraPosition, stonePos).setY(0).normalize();
+    this.focusCameraPosition.copy(stonePos).addScaledVector(toCamera, 1.7).setY(stonePos.y + 0.85);
+    this.focusLookTarget.copy(stonePos).setY(stonePos.y + 0.05);
+  }
+
+  #closeStoneReader() {
+    this.focusedStone = null;
+    this.hasOpenedOverlay = false;
+    if (this.stoneOverlay) {
+      this.stoneOverlay.classList.remove('is-visible');
+      this.stoneOverlay.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  #updateFocusFade(dt) {
+    const target = this.focusedStone ? 1 : 0;
+    const speed = this.focusedStone ? 1.2 : 1.6;
+    this.focusProgress = THREE.MathUtils.clamp(
+      this.focusProgress + Math.sign(target - this.focusProgress) * dt * speed,
+      0,
+      1
+    );
+
+    if (this.focusedStone && !this.hasOpenedOverlay && this.focusProgress > 0.85) {
+      this.hasOpenedOverlay = true;
+      populateStoneReader(this.stoneOverlay, this.focusedStone.userData.entry);
+      this.stoneOverlay.classList.add('is-visible');
+      this.stoneOverlay.setAttribute('aria-hidden', 'false');
+    }
+  }
+}
+
+// ── TimelineStone ─────────────────────────────────────────────
+class TimelineStone extends THREE.Group {
+  constructor(entry, sharedRockMaterial, seed) {
+    super();
+    this.entry = entry;
+
+    // Flat boulder base — wider/taller to host the larger inscription
+    const rock = new THREE.Mesh(createWeatheredRockGeometry(seed), sharedRockMaterial);
+    rock.scale.set(1.25, 0.36, 0.92);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    this.add(rock);
+    this.rock = rock;
+
+    // Etched-text plane resting on the top face
+    const textTexture = createEtchedStoneTexture(entry);
+    const textMaterial = new THREE.MeshStandardMaterial({
+      map: textTexture,
+      emissive: 0xf0d060,
+      emissiveMap: textTexture,
+      emissiveIntensity: 0.85,
+      roughness: 0.92,
+      metalness: 0,
+      transparent: true,
+      depthWrite: false,
+    });
+    const textPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.85, 0.86), textMaterial);
+    textPlane.rotation.x = -Math.PI / 2;
+    textPlane.position.y = 0.37;
+    textPlane.receiveShadow = false;
+    this.add(textPlane);
+    this.textPlane = textPlane;
+    this.textMaterial = textMaterial;
+    this.baseEmissive = 0.85;
+
+    // Generous invisible hitbox so clicking near the stone counts
+    const hitbox = new THREE.Mesh(
+      new THREE.BoxGeometry(2.0, 1.4, 1.6),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+    );
+    hitbox.position.y = 0.1;
+    hitbox.userData.stone = this;
+    this.add(hitbox);
+    this.hitbox = hitbox;
+
+    this.userData.stone = this;
+  }
+
+  update(t, isHovered, isFocused) {
+    // Hover/focus brightens the etched text
+    const target = isFocused ? 2.2 : isHovered ? 1.55 : this.baseEmissive;
+    this.textMaterial.emissiveIntensity = THREE.MathUtils.lerp(
+      this.textMaterial.emissiveIntensity,
+      target,
+      0.09
+    );
+    // Subtle breathing on the etched glyphs
+    this.textMaterial.emissiveIntensity += Math.sin(t * 1.4 + this.position.x * 0.7) * 0.05;
+  }
+}
+
+// ── Stone-reader overlay (DOM) ──────────────────────────────
+function createStoneReaderOverlay(onClose) {
+  const app = document.getElementById('app');
+  const overlay = document.createElement('section');
+  overlay.className = 'tablet-reader stone-reader';
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+
+  const panel = document.createElement('article');
+  panel.className = 'tablet-reader__panel';
+
+  const closeButton = document.createElement('button');
+  closeButton.className = 'tablet-reader__close';
+  closeButton.type = 'button';
+  closeButton.textContent = 'Close';
+  closeButton.addEventListener('click', onClose);
+
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'tablet-reader__eyebrow';
+
+  const title = document.createElement('h2');
+  title.className = 'tablet-reader__title';
+
+  const body = document.createElement('div');
+  body.className = 'tablet-reader__body';
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) onClose();
+  });
+
+  panel.append(closeButton, eyebrow, title, body);
+  overlay.append(panel);
+  app?.append(overlay);
+  return overlay;
+}
+
+function populateStoneReader(overlay, entry) {
+  if (!overlay) return;
+  overlay.querySelector('.tablet-reader__eyebrow').textContent = entry.year;
+  overlay.querySelector('.tablet-reader__title').textContent = entry.title;
+  const body = overlay.querySelector('.tablet-reader__body');
+  body.innerHTML = '';
+  for (const paragraph of entry.body.split('\n\n')) {
+    const text = paragraph.trim();
+    if (!text) continue;
+    const p = document.createElement('p');
+    p.textContent = text;
+    body.append(p);
+  }
+  body.scrollTop = 0;
 }
 
 function getSceneClass(index) {
@@ -1596,6 +2401,262 @@ function createGraceFlameTexture() {
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// ── Underwater scene textures ─────────────────────────────────
+
+function createUnderwaterBackgroundTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d');
+
+  // Vertical gradient: bright surface → deep abyss
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0.00, '#0b3447');
+  gradient.addColorStop(0.16, '#0a2b3c');
+  gradient.addColorStop(0.36, '#071f2f');
+  gradient.addColorStop(0.58, '#051724');
+  gradient.addColorStop(0.78, '#03101a');
+  gradient.addColorStop(1.00, '#020a10');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Faint diffuse light shafts across the upper band
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(34px)';
+  const random = seededRandom(8821);
+
+  // Soft water veils around the horizon area keep the background from
+  // reading as two flat bands divided by a hard line.
+  for (let i = 0; i < 9; i++) {
+    const y = canvas.height * (0.32 + random() * 0.18);
+    const x = canvas.width * (0.18 + random() * 0.64);
+    ctx.fillStyle = `rgba(95, 155, 175, ${0.025 + random() * 0.035})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      x,
+      y,
+      420 + random() * 520,
+      26 + random() * 42,
+      (random() - 0.5) * 0.12,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 14; i++) {
+    const x = random() * canvas.width;
+    ctx.fillStyle = `rgba(140, 200, 220, ${0.05 + random() * 0.05})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      x,
+      canvas.height * (0.04 + random() * 0.18),
+      80 + random() * 180,
+      18 + random() * 40,
+      (random() - 0.5) * 0.3,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Particulate suspension grain
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (let i = 0; i < 1800; i++) {
+    const a = 0.03 + random() * 0.06;
+    ctx.fillStyle = `rgba(160, 200, 220, ${a})`;
+    ctx.fillRect(random() * canvas.width, random() * canvas.height, 1, 1);
+  }
+  ctx.restore();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  return texture;
+}
+
+function createCausticsTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const image = ctx.createImageData(size, size);
+  const random = seededRandom(7777);
+
+  // Build interlocking sine waves to fake voronoi-like caustic ridges
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const nx = x / size;
+      const ny = y / size;
+      const a = Math.sin(nx * 18 + Math.sin(ny * 11) * 2.4);
+      const b = Math.sin(ny * 22 + Math.cos(nx * 14) * 2.0);
+      const c = Math.sin((nx + ny) * 28 + Math.sin(nx * ny * 24) * 1.6);
+      const d = Math.sin(nx * 34 - ny * 17) * 0.5;
+      let v = (a + b + c + d) * 0.25;            // -1..+1
+      v = Math.max(0, v);                        // sharp cutoffs
+      v = Math.pow(v, 3.4);                      // crisp caustic peaks
+      const value = Math.min(255, v * 255 + random() * 6);
+      image.data[i] = value;
+      image.data[i + 1] = value;
+      image.data[i + 2] = value;
+      image.data[i + 3] = value;                 // alpha modulation too
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function createGodRayTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0.0,  'rgba(180, 220, 240, 0.55)');
+  gradient.addColorStop(0.35, 'rgba(140, 200, 230, 0.32)');
+  gradient.addColorStop(0.75, 'rgba(80, 140, 180, 0.08)');
+  gradient.addColorStop(1.0,  'rgba(20, 60, 90, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Horizontal taper — fade left/right edges
+  ctx.globalCompositeOperation = 'destination-in';
+  const horiz = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  horiz.addColorStop(0.00, 'rgba(0,0,0,0)');
+  horiz.addColorStop(0.50, 'rgba(0,0,0,1)');
+  horiz.addColorStop(1.00, 'rgba(0,0,0,0)');
+  ctx.fillStyle = horiz;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createSeafloorTextureSet() {
+  const size = 512;
+  const colorCanvas = document.createElement('canvas');
+  const roughnessCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = size;
+  roughnessCanvas.width = roughnessCanvas.height = size;
+  bumpCanvas.width = bumpCanvas.height = size;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughnessCtx = roughnessCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(size, size);
+  const roughnessImage = roughnessCtx.createImageData(size, size);
+  const bumpImage = bumpCtx.createImageData(size, size);
+  const random = seededRandom(50211);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const nx = x / size;
+      const ny = y / size;
+      const ripple = Math.sin(nx * 38 + Math.sin(ny * 9) * 2.2) * 0.5 + 0.5;
+      const grit = random();
+      const pebble = random() > 0.96 ? 0.5 : 0;
+      const algae = random() > 0.985 ? 0.4 : 0;
+      const shade = 0.55 + ripple * 0.15 + grit * 0.18 - pebble * 0.15;
+
+      // Cool blue-grey sand with hints of green algae
+      colorImage.data[i]     = Math.max(28, Math.min(110, 64 * shade + algae * 18));
+      colorImage.data[i + 1] = Math.max(36, Math.min(130, 78 * shade + algae * 38));
+      colorImage.data[i + 2] = Math.max(40, Math.min(120, 76 * shade + grit * 12));
+      colorImage.data[i + 3] = 255;
+
+      const roughness = 218 + random() * 32 - pebble * 30;
+      roughnessImage.data[i] = roughness;
+      roughnessImage.data[i + 1] = roughness;
+      roughnessImage.data[i + 2] = roughness;
+      roughnessImage.data[i + 3] = 255;
+
+      const bump = 96 + ripple * 38 + grit * 46 + pebble * 70;
+      bumpImage.data[i] = bump;
+      bumpImage.data[i + 1] = bump;
+      bumpImage.data[i + 2] = bump;
+      bumpImage.data[i + 3] = 255;
+    }
+  }
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughnessCtx.putImageData(roughnessImage, 0, 0);
+  bumpCtx.putImageData(bumpImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughnessCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((texture) => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(7, 7);
+    texture.anisotropy = 8;
+  });
+  return { color, roughness, bump };
+}
+
+function createEtchedStoneTexture(entry) {
+  const w = 1024;
+  const h = 480;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+
+  // Decorative carved frame — a top hairline + a bottom underline
+  // Tells the viewer at a glance that this is an inscribed plaque.
+  ctx.strokeStyle = 'rgba(255, 230, 160, 0.55)';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(80, 72);
+  ctx.lineTo(w - 80, 72);
+  ctx.stroke();
+
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(245, 215, 130, 0.4)';
+  ctx.beginPath();
+  ctx.moveTo(180, h - 80);
+  ctx.lineTo(w - 180, h - 80);
+  ctx.stroke();
+
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+
+  // Year — large and heavy, the timeline anchor
+  ctx.fillStyle = 'rgba(255, 240, 175, 1)';
+  ctx.font = '600 192px "Cormorant Garamond", "EB Garamond", Georgia, serif';
+  ctx.fillText(entry.year, w / 2, h * 0.36);
+
+  // Title — italic serif, calmer weight
+  ctx.fillStyle = 'rgba(248, 230, 180, 0.96)';
+  ctx.font = 'italic 300 68px "Cormorant Garamond", Georgia, serif';
+  ctx.fillText(entry.title, w / 2, h * 0.74);
+
+  // Weathered grain — punch out fine specks so the carving looks aged
+  const random = seededRandom(entry.year.charCodeAt(0) * 71 + entry.title.length);
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 240; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${0.04 + random() * 0.14})`;
+    ctx.fillRect(random() * w, random() * h, 1.2 + random() * 1.6, 1.2 + random() * 1.6);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
   return texture;
 }
 

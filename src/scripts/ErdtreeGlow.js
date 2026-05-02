@@ -7,28 +7,6 @@ function pulse(t) {
 }
 
 const PARTICLE_COUNT = 55;
-const WISP_COUNT     = 7;
-
-// ── Cloud wisp ───────────────────────────────────────────────
-class CloudWisp {
-  x = 0; y = 0;
-  halfW = 80; halfH = 18;
-  speed = 0.12;
-  alpha = 0.06;
-
-  // scatter=true  → place anywhere across the canvas width (initial fill)
-  // scatter=false → spawn just off the left edge (wrap respawn)
-  reset(w, h, scatter = false) {
-    this.halfW = rand(40, 100);    // half of 80–200px width
-    this.halfH = rand(9, 20);      // half of 18–40px height
-    this.speed = rand(0.08, 0.20);
-    this.alpha = rand(0.13, 0.26);
-    this.y     = h * (0.15 + Math.random() * 0.70); // middle 70%
-    this.x     = scatter
-      ? rand(-this.halfW, w + this.halfW)
-      : -this.halfW;
-  }
-}
 
 class Ember {
   x = 0; y = 0;
@@ -70,7 +48,6 @@ export class ErdtreeGlow {
   #nx;
   #ny;
   #particles = [];
-  #wisps     = [];
   #onResize;
 
   /**
@@ -91,7 +68,7 @@ export class ErdtreeGlow {
 
   // Driven by MapParallax — no own RAF loop.
   // offsetX/offsetY are the current parallax translate (in px). Glow + embers
-  // ride that offset; wisps stay anchored to the viewport as a foreground layer.
+  // ride that offset.
   tick(offsetX = 0, offsetY = 0) {
     const t   = performance.now() / 1000;
     const ctx = this.#ctx;
@@ -100,7 +77,7 @@ export class ErdtreeGlow {
 
     const { cx, cy, worldWidth } = this.#getMapPoint(w, h);
     const spawnR = worldWidth * 0.025;
-    if (this.#particles.length === 0 || this.#wisps.length === 0) {
+    if (this.#particles.length === 0) {
       this.#initParticles();
     }
 
@@ -155,26 +132,6 @@ export class ErdtreeGlow {
     }
     ctx.globalAlpha = 1;
     ctx.restore();
-
-    // ═══ Foreground atmospheric layer (wisps) ═══════════════════
-    // Use ctx.filter blur so a solid ellipse fades naturally to transparent
-    // at the edges — bypasses any non-uniform-scale gradient quirks.
-    for (const wisp of this.#wisps) {
-      wisp.x += wisp.speed;
-      if (wisp.x - wisp.halfW > w) wisp.reset(w, h, false);
-
-      ctx.save();
-      ctx.filter   = `blur(${(wisp.halfH * 0.7).toFixed(1)}px)`;
-      ctx.fillStyle = `rgba(200,195,180,${(wisp.alpha * 1.4).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(
-        wisp.x, wisp.y,
-        wisp.halfW * 0.65, wisp.halfH * 0.55,
-        0, 0, Math.PI * 2
-      );
-      ctx.fill();
-      ctx.restore();
-    }
   }
 
   destroy() {
@@ -185,7 +142,6 @@ export class ErdtreeGlow {
     this.#canvas.width  = window.innerWidth;
     this.#canvas.height = window.innerHeight;
     this.#particles = [];
-    this.#wisps = [];
   }
 
   #initParticles() {
@@ -198,12 +154,6 @@ export class ErdtreeGlow {
       const p = new Ember();
       p.resetScattered(cx, cy, spawnR);
       return p;
-    });
-
-    this.#wisps = Array.from({ length: WISP_COUNT }, () => {
-      const wisp = new CloudWisp();
-      wisp.reset(w, h, true); // scatter across full width on init
-      return wisp;
     });
   }
 

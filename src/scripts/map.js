@@ -4,7 +4,10 @@ import { MapZoomController } from './MapZoomController.js';
 import { createRegionScenes } from './regionScenes.js';
 import { initRegionMarkers, regions } from './regions.js';
 
-export function initMap(sceneManager) {
+const CLICK_MOVE_THRESHOLD = 7;
+const CLICK_TIME_THRESHOLD = 360;
+
+export function initMap(sceneManager, { emitDust } = {}) {
   const app        = document.getElementById('app');
   const img        = document.getElementById('map-img');
   const layer      = document.getElementById('map-layer');
@@ -36,10 +39,50 @@ export function initMap(sceneManager) {
     sceneManager,
   });
 
+  initMapDust(mapViewport, zoom, emitDust);
+
   new MapParallax(layer, { viewport: mapViewport })
     .addTickListener((x, y) => {
       const offset = zoom.tick(x, y);
       glow.tick(offset.x, offset.y);
     })
     .start();
+}
+
+function initMapDust(mapViewport, zoom, emitDust) {
+  if (!emitDust) return;
+
+  let pointerStart = null;
+
+  mapViewport.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 && event.pointerType === 'mouse') return;
+    if (event.target.closest('.region-marker, .return-button, .tablet-reader')) return;
+    if (zoom.isParallaxSuppressed) return;
+
+    pointerStart = {
+      x: event.clientX,
+      y: event.clientY,
+      time: performance.now(),
+      pointerId: event.pointerId,
+    };
+  });
+
+  mapViewport.addEventListener('pointerup', (event) => {
+    if (!pointerStart || pointerStart.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - pointerStart.x;
+    const dy = event.clientY - pointerStart.y;
+    const distance = Math.hypot(dx, dy);
+    const duration = performance.now() - pointerStart.time;
+    const isQuickClick = distance <= CLICK_MOVE_THRESHOLD && duration <= CLICK_TIME_THRESHOLD;
+    pointerStart = null;
+
+    if (!isQuickClick || zoom.isParallaxSuppressed) return;
+
+    emitDust(event.clientX, event.clientY);
+  });
+
+  mapViewport.addEventListener('pointercancel', () => {
+    pointerStart = null;
+  });
 }

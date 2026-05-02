@@ -8,6 +8,11 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  cursor: url('/assets/cursor-64.png') 8 6, auto;
+}
+
+* {
+  cursor: url('/assets/cursor-64.png') 8 6, auto;
 }
 
 img, canvas, svg {
@@ -22,7 +27,6 @@ a {
 button {
   background: none;
   border: none;
-  cursor: pointer;
   font: inherit;
   color: inherit;
 }

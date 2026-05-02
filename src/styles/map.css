@@ -9,12 +9,7 @@
   overflow: hidden;
   touch-action: none;
   overscroll-behavior: none;
-  cursor: grab;
   transition: opacity 760ms cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-#map-viewport.is-map-dragging {
-  cursor: grabbing;
 }
 
 .three-renderer-canvas {
@@ -124,7 +119,6 @@
   color: var(--gold);
   font: inherit;
   transform: translate(-50%, -50%);
-  cursor: pointer;
   overflow: visible;
   pointer-events: auto;
   transition: opacity 260ms ease;

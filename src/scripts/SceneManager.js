@@ -44,7 +44,6 @@ export class SceneManager {
   setScene(scene) {
     this.currentScene?.exit();
     this.currentScene = scene;
-    this.renderer.domElement.style.cursor = '';
     this.#clock.getDelta();
     this.currentScene?.enter(this.camera);
   }
@@ -87,7 +86,6 @@ export class SceneManager {
     if (!this.currentScene) return;
 
     const hit = this.#getFirstHit(event);
-    this.renderer.domElement.style.cursor = hit ? 'pointer' : '';
     this.currentScene.handleSceneHover?.(hit);
   }
 

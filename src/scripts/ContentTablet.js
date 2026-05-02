@@ -15,22 +15,89 @@ export class ContentTablet extends THREE.Mesh {
     depth = 0.3,
   }) {
     const frontTexture = createTabletTexture({ title, body, metadata });
+    const stoneTextures = createStoneTextureSet();
     const stoneMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6d6a5f,
-      roughness: 0.96,
+      color: 0x9a9484,
+      map: stoneTextures.color,
+      roughnessMap: stoneTextures.roughness,
+      bumpMap: stoneTextures.bump,
+      bumpScale: 0.08,
+      roughness: 0.98,
       metalness: 0.02,
     });
     const frontMaterial = new THREE.MeshStandardMaterial({
       map: frontTexture,
+      bumpMap: stoneTextures.bump,
+      bumpScale: 0.018,
       roughness: 0.92,
       metalness: 0,
     });
 
     super(
-      new THREE.BoxGeometry(width, height, depth),
+      new THREE.BoxGeometry(width, height, depth, 5, 9, 2),
       [stoneMaterial, stoneMaterial, stoneMaterial, stoneMaterial, frontMaterial, stoneMaterial]
     );
   }
+}
+
+function createStoneTextureSet() {
+  const size = 512;
+  const colorCanvas = document.createElement('canvas');
+  const roughnessCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = size;
+  roughnessCanvas.width = roughnessCanvas.height = size;
+  bumpCanvas.width = bumpCanvas.height = size;
+
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughnessCtx = roughnessCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(size, size);
+  const roughnessImage = roughnessCtx.createImageData(size, size);
+  const bumpImage = bumpCtx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const vein = Math.sin((x + y * 0.7) * 0.045) * 0.5 + Math.cos((x * 0.5 - y) * 0.035) * 0.5;
+      const chip = Math.random() > 0.985 ? 38 : 0;
+      const grime = Math.random() > 0.965 ? -30 : 0;
+      const value = 96 + vein * 24 + Math.random() * 28 + chip + grime;
+      colorImage.data[i] = Math.max(44, Math.min(170, value + 7));
+      colorImage.data[i + 1] = Math.max(42, Math.min(164, value + 2));
+      colorImage.data[i + 2] = Math.max(36, Math.min(150, value - 10));
+      colorImage.data[i + 3] = 255;
+
+      const roughness = 220 + Math.random() * 30;
+      roughnessImage.data[i] = roughness;
+      roughnessImage.data[i + 1] = roughness;
+      roughnessImage.data[i + 2] = roughness;
+      roughnessImage.data[i + 3] = 255;
+
+      const bump = 112 + vein * 38 + Math.random() * 62 + chip * 0.5;
+      bumpImage.data[i] = bump;
+      bumpImage.data[i + 1] = bump;
+      bumpImage.data[i + 2] = bump;
+      bumpImage.data[i + 3] = 255;
+    }
+  }
+
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughnessCtx.putImageData(roughnessImage, 0, 0);
+  bumpCtx.putImageData(bumpImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughnessCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((texture) => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1.4, 1.8);
+    texture.anisotropy = 6;
+  });
+
+  return { color, roughness, bump };
 }
 
 function createTabletTexture({ title, body, metadata }) {

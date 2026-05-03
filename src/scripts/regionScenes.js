@@ -844,6 +844,7 @@ class ProjectsScene extends RegionScene {
     this.addArenaFloor();
     this.addCenterDais();
     this.addColosseumStructure();
+    this.addSwordReliquary();
     this.addSiteOfGrace();
     this.addProjectMarkers();
     this.addAtmosphere();
@@ -1007,6 +1008,176 @@ class ProjectsScene extends RegionScene {
     upper.receiveShadow = true;
     this.group.add(upper);
     this.centerDais = upper;
+  }
+
+  // ── Sword reliquary behind the project stones ───────────────
+  addSwordReliquary() {
+    const reliquary = new THREE.Group();
+    reliquary.position.set(0, -0.9, -4.45);
+    reliquary.rotation.y = -0.03;
+
+    const stone = createMarbleMaterial({ tint: 0x9f947f, veinStrength: 0.48, speckStrength: 0.52 });
+    const darkStone = createMarbleMaterial({ tint: 0x756b5a, veinStrength: 0.6, speckStrength: 0.62 });
+    const metal = new THREE.MeshStandardMaterial({
+      color: 0xd7d1bd,
+      emissive: 0x3a3020,
+      emissiveIntensity: 0.08,
+      roughness: 0.2,
+      metalness: 0.64,
+      envMapIntensity: 0.55,
+    });
+    const darkMetal = new THREE.MeshStandardMaterial({
+      color: 0x302820,
+      roughness: 0.38,
+      metalness: 0.62,
+    });
+    const oldGold = new THREE.MeshStandardMaterial({
+      color: 0xb88c38,
+      emissive: 0x5a3f12,
+      emissiveIntensity: 0.12,
+      roughness: 0.42,
+      metalness: 0.55,
+    });
+
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(2.28, 0.07, 0.24),
+      darkStone
+    );
+    rail.position.y = 0.13;
+    rail.castShadow = true;
+    rail.receiveShadow = true;
+    reliquary.add(rail);
+
+    const restPositions = [-0.58, 0.62];
+    for (const x of restPositions) {
+      const foot = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42, 0.14, 0.42),
+        stone
+      );
+      foot.position.set(x, 0.16 + (x > 0 ? 0.08 : 0), 0);
+      foot.castShadow = true;
+      foot.receiveShadow = true;
+      reliquary.add(foot);
+
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.38, 0.22),
+        darkStone
+      );
+      post.position.set(x, 0.43 + (x > 0 ? 0.08 : 0), 0);
+      post.castShadow = true;
+      post.receiveShadow = true;
+      reliquary.add(post);
+
+      const leftProng = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.28, 0.14),
+        stone
+      );
+      leftProng.position.set(x - 0.1, 0.69 + (x > 0 ? 0.08 : 0), 0);
+      leftProng.rotation.z = -0.16;
+      leftProng.castShadow = true;
+      leftProng.receiveShadow = true;
+      reliquary.add(leftProng);
+
+      const rightProng = leftProng.clone();
+      rightProng.position.x = x + 0.1;
+      rightProng.rotation.z = 0.16;
+      reliquary.add(rightProng);
+    }
+
+    const bladeShape = new THREE.Shape();
+    bladeShape.moveTo(-0.62, 0.018);
+    bladeShape.bezierCurveTo(-0.18, 0.02, 0.58, 0.06, 1.18, 0.14);
+    bladeShape.lineTo(1.42, 0.205);
+    bladeShape.lineTo(1.29, 0.065);
+    bladeShape.bezierCurveTo(0.58, -0.06, -0.18, -0.11, -0.62, -0.13);
+    bladeShape.lineTo(-0.62, 0.018);
+
+    const bladeGeometry = new THREE.ExtrudeGeometry(bladeShape, {
+      depth: 0.026,
+      bevelEnabled: true,
+      bevelThickness: 0.007,
+      bevelSize: 0.007,
+      bevelSegments: 1,
+    });
+    bladeGeometry.center();
+
+    const blade = new THREE.Mesh(bladeGeometry, metal);
+    blade.position.set(0.1, 0.76, 0.04);
+    blade.rotation.z = 0;
+    blade.castShadow = true;
+    blade.receiveShadow = true;
+    reliquary.add(blade);
+
+    const tsuba = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.115, 0.115, 0.048, 24),
+      oldGold
+    );
+    tsuba.position.set(-0.92, 0.67, 0.052);
+    tsuba.rotation.z = Math.PI / 2;
+    tsuba.castShadow = true;
+    reliquary.add(tsuba);
+
+    const habaki = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.04, 0.11, 18),
+      oldGold
+    );
+    habaki.position.set(-0.82, 0.666, 0.058);
+    habaki.rotation.z = Math.PI / 2 + 0.02;
+    habaki.castShadow = true;
+    reliquary.add(habaki);
+
+    const grip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.056, 0.46, 18),
+      darkMetal
+    );
+    grip.position.set(-1.17, 0.655, 0.052);
+    grip.rotation.z = Math.PI / 2 + 0.025;
+    grip.castShadow = true;
+    reliquary.add(grip);
+
+    const wrapMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc99f45,
+      emissive: 0x3a2608,
+      emissiveIntensity: 0.08,
+      roughness: 0.42,
+      metalness: 0.48,
+    });
+    for (let i = 0; i < 5; i++) {
+      const wrap = new THREE.Mesh(
+        new THREE.TorusGeometry(0.058, 0.006, 8, 18),
+        wrapMaterial
+      );
+      wrap.position.set(-1.34 + i * 0.08, 0.65 + i * 0.002, 0.052);
+      wrap.rotation.y = Math.PI / 2;
+      wrap.rotation.z = 0.025;
+      reliquary.add(wrap);
+    }
+
+    const pommel = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.075, 0),
+      oldGold
+    );
+    pommel.position.set(-1.44, 0.648, 0.052);
+    pommel.scale.set(0.85, 1.05, 0.75);
+    pommel.castShadow = true;
+    reliquary.add(pommel);
+
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(1.0, 40),
+      new THREE.MeshBasicMaterial({
+        color: 0x4c3f2a,
+        transparent: true,
+        opacity: 0.16,
+        depthWrite: false,
+      })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.scale.set(1.62, 0.24, 1);
+    shadow.position.y = 0.012;
+    reliquary.add(shadow);
+
+    reliquary.scale.setScalar(0.82);
+    this.group.add(reliquary);
   }
 
   // ── Outer ring of fluted marble columns + lintel ────────────

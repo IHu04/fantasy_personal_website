@@ -257,7 +257,29 @@ p {
   letter-spacing: 0.13em;
 }
 
+.intro-screen__title-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.intro-screen__title-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -1.05rem -2.2rem -0.4rem;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at center, rgba(240, 208, 96, 0.28), rgba(201, 168, 76, 0.12) 35%, transparent 72%);
+  filter: blur(10px);
+  opacity: 0.44;
+  animation: intro-name-glow 4.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
 .intro-screen__title {
+  position: relative;
+  z-index: 2;
   margin: 0;
   color: #d8b85e;
   font-size: clamp(2.25rem, 6.2vw, 5rem);
@@ -271,6 +293,7 @@ p {
     0 2px 2px rgba(0, 0, 0, 0.95),
     0 0 14px rgba(201, 168, 76, 0.32),
     0 0 42px rgba(201, 168, 76, 0.12);
+  animation: intro-title-breathe 5.6s ease-in-out infinite;
 }
 
 .intro-screen__title::after {
@@ -281,6 +304,51 @@ p {
   margin: clamp(1rem, 2.4vw, 1.55rem) auto 0;
   background: linear-gradient(90deg, transparent, rgba(240, 208, 96, 0.62), rgba(122, 92, 30, 0.74), rgba(240, 208, 96, 0.62), transparent);
   box-shadow: 0 0 12px rgba(201, 168, 76, 0.32);
+}
+
+.intro-screen__name-particles {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 239, 166, 0.95);
+  box-shadow:
+    -160px 3px 0 -1px rgba(240, 208, 96, 0.42),
+    -124px -14px 0 -1px rgba(255, 238, 170, 0.54),
+    -94px 18px 0 -1px rgba(201, 168, 76, 0.42),
+    -58px -28px 0 -1px rgba(255, 238, 170, 0.58),
+    -18px 24px 0 -1px rgba(240, 208, 96, 0.5),
+    24px -22px 0 -1px rgba(255, 238, 170, 0.48),
+    64px 17px 0 -1px rgba(201, 168, 76, 0.5),
+    104px -11px 0 -1px rgba(255, 238, 170, 0.54),
+    146px 7px 0 -1px rgba(240, 208, 96, 0.42);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro-screen__name-particles--back {
+  filter: blur(0.7px);
+  transform: translate(-50%, -50%);
+  animation: intro-name-particles-a 5.8s ease-in-out infinite;
+}
+
+.intro-screen__name-particles--front {
+  width: 3px;
+  height: 3px;
+  box-shadow:
+    -136px -4px 0 -1px rgba(255, 241, 184, 0.48),
+    -92px 8px 0 -1px rgba(240, 208, 96, 0.52),
+    -42px -12px 0 -1px rgba(255, 238, 170, 0.6),
+    10px 10px 0 -1px rgba(240, 208, 96, 0.5),
+    52px -7px 0 -1px rgba(255, 238, 170, 0.56),
+    96px 12px 0 -1px rgba(201, 168, 76, 0.5),
+    134px -5px 0 -1px rgba(255, 241, 184, 0.46);
+  filter: blur(0.25px);
+  transform: translate(-50%, -50%);
+  animation: intro-name-particles-b 7.2s ease-in-out 0.7s infinite;
 }
 
 .intro-lock {
@@ -485,6 +553,68 @@ p {
   }
 }
 
+@keyframes intro-name-glow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scaleX(0.92) scaleY(0.82);
+  }
+
+  48% {
+    opacity: 0.68;
+    transform: scaleX(1.08) scaleY(1);
+  }
+}
+
+@keyframes intro-title-breathe {
+  0%, 100% {
+    text-shadow:
+      0 1px 0 rgba(255, 236, 160, 0.28),
+      0 2px 2px rgba(0, 0, 0, 0.95),
+      0 0 12px rgba(201, 168, 76, 0.28),
+      0 0 34px rgba(201, 168, 76, 0.1);
+  }
+
+  48% {
+    text-shadow:
+      0 1px 0 rgba(255, 236, 160, 0.44),
+      0 2px 2px rgba(0, 0, 0, 0.95),
+      0 0 19px rgba(240, 208, 96, 0.44),
+      0 0 62px rgba(201, 168, 76, 0.2);
+  }
+}
+
+@keyframes intro-name-particles-a {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -24%) scale(0.86);
+  }
+
+  18%, 72% {
+    opacity: 0.82;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -96%) scale(1.08);
+  }
+}
+
+@keyframes intro-name-particles-b {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -34%) scale(0.78);
+  }
+
+  22%, 68% {
+    opacity: 0.66;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -112%) scale(1.02);
+  }
+}
+
 .intro-screen__play:hover,
 .intro-screen__play:focus-visible {
   border-color: rgba(240, 208, 96, 0.78);
@@ -510,7 +640,11 @@ p {
 @media (prefers-reduced-motion: reduce) {
   .intro-screen,
   .intro-screen__veil,
-  .intro-screen__content {
+  .intro-screen__content,
+  .intro-screen__title,
+  .intro-screen__title-wrap::before,
+  .intro-screen__name-particles {
     transition-duration: 1ms;
+    animation: none;
   }
 }

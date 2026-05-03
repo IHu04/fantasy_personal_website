@@ -494,15 +494,12 @@
 
 .grace-flash::before {
   background:
-    linear-gradient(90deg, rgba(201, 168, 76, 0), rgba(201, 168, 76, 0.2), rgba(201, 168, 76, 0)),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 244, 188, 0) 0,
-      rgba(255, 244, 188, 0) 76px,
-      rgba(255, 244, 188, 0.022) 80px,
-      rgba(255, 244, 188, 0) 112px
-    );
-  opacity: 0.48;
+    radial-gradient(ellipse at 50% 52%, rgba(240, 208, 96, 0.16), transparent 30%),
+    radial-gradient(ellipse at 28% 34%, rgba(201, 168, 76, 0.045), transparent 24%),
+    radial-gradient(ellipse at 72% 62%, rgba(201, 168, 76, 0.04), transparent 26%),
+    linear-gradient(115deg, transparent 0%, rgba(255, 244, 188, 0.018) 46%, transparent 62%);
+  opacity: 0.5;
+  mix-blend-mode: screen;
 }
 
 .grace-flash::after {
@@ -525,15 +522,15 @@
 .grace-flash__text {
   position: relative;
   z-index: 1;
-  display: block;
-  width: min(640px, 82vw);
+  display: inline-block;
+  width: auto;
+  max-width: 82vw;
   margin-top: 0;
-  padding: 0.42rem 1.2rem 0.5rem;
-  border-top: 1px solid rgba(201, 168, 76, 0.42);
-  border-bottom: 1px solid rgba(201, 168, 76, 0.34);
+  padding: 0.42rem 1.35rem 0.5rem;
+  border: 1px solid rgba(201, 168, 76, 0.24);
+  border-inline-color: rgba(201, 168, 76, 0.08);
   background:
-    linear-gradient(90deg, transparent, rgba(20, 15, 6, 0.82) 18%, rgba(20, 15, 6, 0.88) 50%, rgba(20, 15, 6, 0.82) 82%, transparent),
-    rgba(0, 0, 0, 0.32);
+    radial-gradient(ellipse at center, rgba(46, 34, 12, 0.56), rgba(0, 0, 0, 0.18) 68%, transparent 100%);
   color: var(--gold-bright);
   font-family: var(--font-serif);
   font-size: clamp(1.28rem, 3vw, 2.25rem);
@@ -544,6 +541,9 @@
   text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.96),
     0 0 12px rgba(201, 168, 76, 0.56);
+  box-shadow:
+    0 0 28px rgba(201, 168, 76, 0.08),
+    inset 0 0 18px rgba(201, 168, 76, 0.05);
   opacity: 0;
   transform: translateY(6px);
   transition:
@@ -557,7 +557,7 @@
 }
 
 .is-grace-flashing .grace-flash::before {
-  animation: loading-strip-drift 3.6s linear infinite;
+  animation: loading-veil-breathe 1.8s ease-in-out infinite alternate;
 }
 
 .is-grace-flashing .grace-flash::after {
@@ -603,13 +603,15 @@
   animation: loading-text-settle 760ms ease-out both;
 }
 
-@keyframes loading-strip-drift {
+@keyframes loading-veil-breathe {
   from {
-    background-position: 0 0, 0 0;
+    opacity: 0.44;
+    transform: scale(1);
   }
 
   to {
-    background-position: 0 0, 56px 0;
+    opacity: 0.64;
+    transform: scale(1.035);
   }
 }
 

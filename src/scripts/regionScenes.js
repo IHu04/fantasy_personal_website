@@ -189,6 +189,8 @@ class LimgraveScene extends RegionScene {
   graceHalo = null;
   graceFlame = null;
   gracePool = null;
+  graceMotes = null;
+  graceMoteData = [];
   motes = null;
   moteData = [];
   tablet = null;
@@ -302,7 +304,7 @@ class LimgraveScene extends RegionScene {
 
     this.graceLight = new THREE.PointLight(0xf0d060, 3.2, 9);
     this.graceLight.position.set(0, 0.05, 0);
-    this.graceLight.castShadow = true;
+    this.graceLight.castShadow = false;
     this.group.add(this.graceLight);
 
     this.gracePool = new THREE.Mesh(
@@ -761,26 +763,842 @@ class LimgraveScene extends RegionScene {
   }
 }
 
-class ProjectsScene extends GraceRegionScene {
-  addHeroObject() {
-    super.addHeroObject();
-    const rune = new THREE.Mesh(
-      new THREE.TorusKnotGeometry(0.42, 0.055, 96, 10),
+// ── Projects catalog ──────────────────────────────────────────
+// Replace these placeholders with real hackathon / personal project entries.
+const projectsCatalog = [
+  {
+    title: 'Hackathon · Project One',
+    eyebrow: 'Hack the North · 2024',
+    body: 'A short paragraph describing the build, the team, and the impact. Talk about what was novel, what shipped, and what surprised you. Keep it 2–4 sentences for stone-tablet legibility in the overlay.',
+  },
+  {
+    title: 'Personal · Project Two',
+    eyebrow: 'Solo Build · 2024',
+    body: 'Describe a side project that taught you something. Mention the stack, the constraint, and the artifact that came out of it. Link or screenshot can be added in the overlay later.',
+  },
+  {
+    title: 'Hackathon · Project Three',
+    eyebrow: 'TreeHacks · 2023',
+    body: 'A weekend project shaped under pressure. Replace with the real one — judges, prize, pivots, lessons.',
+  },
+  {
+    title: 'Personal · Project Four',
+    eyebrow: 'Open Source · 2023',
+    body: 'A library, plugin, or experiment kept on GitHub. Replace this with the actual repo, the problem it solves, and the most interesting design choice.',
+  },
+  {
+    title: 'Hackathon · Project Five',
+    eyebrow: 'PennApps · 2022',
+    body: 'Another team build worth pointing at. Describe the brief, the demo, and what got built between coffee runs.',
+  },
+  {
+    title: 'Personal · Project Six',
+    eyebrow: 'Studio · 2022',
+    body: 'A polish project — long-form, iterative, the kind of thing that shows depth. Replace with the real description and outcome.',
+  },
+];
+
+// ── Projects scene: a white marble colosseum ──────────────────
+class ProjectsScene extends RegionScene {
+  group = new THREE.Group();
+
+  // Grace
+  grace = null;
+  graceLight = null;
+  graceHalo = null;
+  graceFlame = null;
+  gracePool = null;
+  graceMotes = null;
+  graceMoteData = [];
+
+  // Architecture
+  columnRing = null;
+  innerLintel = null;
+  centerDais = null;
+
+  // Project markers
+  markers = [];
+  hoveredMarker = null;
+  focusedMarker = null;
+  focusProgress = 0;
+  hasOpenedOverlay = false;
+
+  // Atmosphere
+  hint = null;
+
+  // Camera focus
+  baseCameraPosition = new THREE.Vector3(0, 2.55, 6.4);
+  baseLookTarget = new THREE.Vector3(0, 0.45, 0);
+  currentLookTarget = new THREE.Vector3(0, 0.45, 0);
+  focusCameraPosition = new THREE.Vector3();
+  focusLookTarget = new THREE.Vector3();
+
+  stoneOverlay = null;
+
+  init() {
+    this.scene.background = createColosseumSkyTexture();
+    this.scene.fog = new THREE.FogExp2(0xf0dfbd, 0.029);
+    this.scene.add(this.group);
+
+    this.addLighting();
+    this.addArenaFloor();
+    this.addCenterDais();
+    this.addColosseumStructure();
+    this.addSiteOfGrace();
+    this.addProjectMarkers();
+    this.addAtmosphere();
+    this.addHint();
+
+    this.stoneOverlay = createStoneReaderOverlay(() => this.#closeReader());
+  }
+
+  // ── Lighting (warm Mediterranean noon) ──────────────────────
+  addLighting() {
+    const ambient = new THREE.AmbientLight(0xfff2d8, 0.72);
+    this.scene.add(ambient);
+
+    // Sun — strong, warm, casts the long colonnade shadows
+    const sun = new THREE.DirectionalLight(0xfff0c4, 2.55);
+    sun.position.set(5, 16, 5);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(4096, 4096);
+    sun.shadow.camera.left = -8.5;
+    sun.shadow.camera.right = 8.5;
+    sun.shadow.camera.top = 8.5;
+    sun.shadow.camera.bottom = -8.5;
+    sun.shadow.camera.near = 4;
+    sun.shadow.camera.far = 28;
+    sun.shadow.bias = -0.00004;
+    sun.shadow.normalBias = 0.045;
+    sun.shadow.radius = 5;
+    sun.shadow.blurSamples = 16;
+    this.scene.add(sun);
+
+    // Sky fill — pale blue from above, warm sand bounce from below
+    const hemi = new THREE.HemisphereLight(0xd7edff, 0xb99b68, 1.12);
+    this.scene.add(hemi);
+
+    // Soft warm fill from camera-side to lift the front faces
+    const fill = new THREE.DirectionalLight(0xffe8ba, 0.72);
+    fill.position.set(-3, 5, 8);
+    this.scene.add(fill);
+  }
+
+  // ── Arena floor ─────────────────────────────────────────────
+  addArenaFloor() {
+    const geometry = createSandTerrainGeometry(120, 180);
+    const textures = createSandstoneFloorTextureSet();
+    this.floor = new THREE.Mesh(
+      geometry,
       new THREE.MeshStandardMaterial({
-        color: this.palette.accent,
-        emissive: this.palette.accent,
-        emissiveIntensity: 0.42,
-        roughness: 0.35,
+        map: textures.color,
+        roughnessMap: textures.roughness,
+        bumpMap: textures.bump,
+        bumpScale: 0.072,
+        color: 0xd9c9a0,
+        roughness: 0.94,
+        metalness: 0,
       })
     );
-    rune.position.set(0, 0.15, 0);
-    this.group.add(rune);
-    this.contentObject = rune;
+    this.floor.rotation.x = -Math.PI / 2;
+    this.floor.position.y = -0.955;
+    this.floor.receiveShadow = true;
+    this.group.add(this.floor);
+
+    const horizonHaze = new THREE.Mesh(
+      new THREE.RingGeometry(12, 58, 192),
+      new THREE.MeshBasicMaterial({
+        color: 0xf3ddb0,
+        transparent: true,
+        opacity: 0.16,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+    );
+    horizonHaze.rotation.x = -Math.PI / 2;
+    horizonHaze.position.y = -0.888;
+    this.group.add(horizonHaze);
+
+    const groundMist = new THREE.Mesh(
+      new THREE.CircleGeometry(58, 192),
+      new THREE.MeshBasicMaterial({
+        map: createGroundHazeTexture(),
+        color: 0xf4dfb8,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+    );
+    groundMist.rotation.x = -Math.PI / 2;
+    groundMist.position.y = -0.884;
+    this.group.add(groundMist);
+
+    const horizonMist = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createHorizonMistTexture(),
+        color: 0xf6dcaa,
+        transparent: true,
+        opacity: 0.78,
+        depthWrite: false,
+        depthTest: false,
+      })
+    );
+    horizonMist.position.set(0, 0.72, -15.5);
+    horizonMist.scale.set(50, 12.5, 1);
+    this.group.add(horizonMist);
+
+    const whiteMarbleTextures = createMarbleTextureSet({ brightness: 1.2, veinStrength: 0.22, speckStrength: 0.25 });
+    const marbleFloor = new THREE.Mesh(
+      new THREE.CircleGeometry(5.95, 128),
+      new THREE.MeshStandardMaterial({
+        color: 0xfffbf0,
+        roughness: 0.58,
+        metalness: 0.02,
+        map: whiteMarbleTextures.color,
+        roughnessMap: whiteMarbleTextures.roughness,
+        bumpMap: whiteMarbleTextures.bump,
+        bumpScale: 0.025,
+      })
+    );
+    marbleFloor.rotation.x = -Math.PI / 2;
+    marbleFloor.position.y = -0.902;
+    marbleFloor.receiveShadow = true;
+    this.group.add(marbleFloor);
+
+    const outerInlay = new THREE.Mesh(
+      new THREE.TorusGeometry(5.95, 0.025, 12, 160),
+      createMarbleMaterial({ tint: 0xffffff, brightness: 1.16, veinStrength: 0.24, speckStrength: 0.25 })
+    );
+    outerInlay.rotation.x = Math.PI / 2;
+    outerInlay.position.y = -0.885;
+    outerInlay.receiveShadow = true;
+    this.group.add(outerInlay);
+
+    const innerInlay = new THREE.Mesh(
+      new THREE.TorusGeometry(2.15, 0.015, 10, 120),
+      createMarbleMaterial({ tint: 0xded8cb, brightness: 1.05, veinStrength: 0.28, speckStrength: 0.28 })
+    );
+    innerInlay.rotation.x = Math.PI / 2;
+    innerInlay.position.y = -0.884;
+    innerInlay.receiveShadow = true;
+    this.group.add(innerInlay);
+  }
+
+  // ── Raised circular dais where the Grace burns ──────────────
+  addCenterDais() {
+    const marbleMat = createMarbleMaterial({ veinStrength: 0.32, speckStrength: 0.35 });
+    // Two-step plinth — wide bottom, narrower top
+    const lower = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.55, 1.65, 0.18, 64),
+      marbleMat
+    );
+    lower.position.y = -0.83;
+    lower.castShadow = true;
+    lower.receiveShadow = true;
+    this.group.add(lower);
+
+    const upper = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.25, 1.32, 0.14, 64),
+      marbleMat
+    );
+    upper.position.y = -0.67;
+    upper.castShadow = true;
+    upper.receiveShadow = true;
+    this.group.add(upper);
+    this.centerDais = upper;
+  }
+
+  // ── Outer ring of fluted marble columns + lintel ────────────
+  addColosseumStructure() {
+    const marble = createMarbleMaterial({ tint: 0xd6ccb7, veinStrength: 0.34, speckStrength: 0.35 });
+    const fluted = createMarbleMaterial({ tint: 0xcac0aa, flutedBump: true, veinStrength: 0.26, speckStrength: 0.25 });
+    const weathered = createMarbleMaterial({ tint: 0xb9ad96, veinStrength: 0.4, speckStrength: 0.42 });
+    const random = seededRandom(6419);
+
+    const outerRadius = 7.05;
+    const columnHeight = 3.2;
+    const columnTopRadius = 0.34;
+    const columnBottomRadius = 0.42;
+    const ringSegments = 18;
+
+    this.columnRing = new THREE.Group();
+    this.group.add(this.columnRing);
+
+    const baseGeometry = new THREE.BoxGeometry(1.0, 0.22, 1.0);
+    const capitalGeometry = new THREE.BoxGeometry(0.9, 0.18, 0.9);
+
+    const ringOffset = Math.PI / ringSegments; // half-step so no column sits directly in front
+    for (let i = 0; i < ringSegments; i++) {
+      const angle = ringOffset + (i / ringSegments) * Math.PI * 2;
+      const cx = Math.sin(angle) * outerRadius;
+      const cz = Math.cos(angle) * outerRadius;
+      const damaged = random() > 0.62;
+      const shaftHeight = columnHeight * (damaged ? THREE.MathUtils.lerp(0.62, 0.86, random()) : THREE.MathUtils.lerp(0.94, 1.03, random()));
+      const shaftGeometry = new THREE.CylinderGeometry(
+        columnTopRadius * THREE.MathUtils.lerp(0.88, 1.06, random()),
+        columnBottomRadius * THREE.MathUtils.lerp(0.94, 1.1, random()),
+        shaftHeight,
+        28,
+        1
+      );
+
+      const column = new THREE.Group();
+      column.position.set(cx + (random() - 0.5) * 0.12, 0, cz + (random() - 0.5) * 0.12);
+      column.lookAt(0, 0, 0);
+      column.rotation.z += (random() - 0.5) * (damaged ? 0.035 : 0.012);
+
+      const base = new THREE.Mesh(baseGeometry, marble);
+      base.position.y = -0.81;
+      base.castShadow = true;
+      base.receiveShadow = true;
+      column.add(base);
+
+      const shaft = new THREE.Mesh(shaftGeometry, fluted);
+      shaft.position.y = -0.81 + 0.22 / 2 + shaftHeight / 2;
+      shaft.rotation.y = random() * Math.PI;
+      shaft.castShadow = true;
+      shaft.receiveShadow = true;
+      column.add(shaft);
+
+      if (!damaged || random() > 0.34) {
+        const capital = new THREE.Mesh(capitalGeometry, marble);
+        capital.position.y = -0.81 + 0.22 / 2 + shaftHeight + 0.09;
+        capital.rotation.y = (random() - 0.5) * 0.08;
+        capital.castShadow = true;
+        capital.receiveShadow = true;
+        column.add(capital);
+      }
+
+      this.columnRing.add(column);
+
+      if (damaged) {
+        const chip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2 + random() * 0.32, 0.08 + random() * 0.16, 0.16 + random() * 0.28),
+          weathered
+        );
+        chip.position.set(cx * 0.95 + (random() - 0.5) * 0.65, -0.82, cz * 0.95 + (random() - 0.5) * 0.65);
+        chip.rotation.set(random() * 0.5, random() * Math.PI, (random() - 0.5) * 0.5);
+        chip.castShadow = true;
+        chip.receiveShadow = true;
+        this.group.add(chip);
+      }
+    }
+
+    const rubbleMat = createMarbleMaterial({ tint: 0xa99d88, veinStrength: 0.46, speckStrength: 0.48 });
+    for (let i = 0; i < 24; i++) {
+      const angle = random() * Math.PI * 2;
+      const radius = THREE.MathUtils.lerp(4.45, 6.65, random());
+      const rubble = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1 + random() * 0.5, 0.06 + random() * 0.2, 0.1 + random() * 0.55),
+        rubbleMat
+      );
+      rubble.position.set(Math.sin(angle) * radius, -0.86 + random() * 0.08, Math.cos(angle) * radius);
+      rubble.rotation.set(random() * 0.7, random() * Math.PI, random() * 0.7);
+      rubble.castShadow = true;
+      rubble.receiveShadow = true;
+      this.group.add(rubble);
+    }
+  }
+
+  // ── Site of Grace at center of dais ─────────────────────────
+  addSiteOfGrace() {
+    const baseY = -0.6;  // dais top is at -0.67 + 0.07 ≈ -0.6 — sit grace just above
+
+    this.grace = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035, 16, 10),
+      new THREE.MeshBasicMaterial({
+        color: 0xf0c45a,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
+    this.grace.position.set(0, baseY + 0.7, 0);
+    this.group.add(this.grace);
+
+    this.graceLight = new THREE.PointLight(0xf0c45a, 2.55, 9);
+    this.graceLight.position.set(0, baseY + 0.85, 0);
+    this.graceLight.castShadow = true;
+    this.group.add(this.graceLight);
+
+    this.gracePool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.4, 64),
+      new THREE.MeshBasicMaterial({
+        map: createLightPoolTexture(),
+        color: 0xe7b84e,
+        transparent: true,
+        opacity: 0.16,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.gracePool.rotation.x = -Math.PI / 2;
+    this.gracePool.position.set(0, baseY + 0.005, 0);
+    this.gracePool.scale.setScalar(0.86);
+    this.group.add(this.gracePool);
+
+    this.graceHalo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createRadialGlowTexture('#f0d060'),
+        color: 0xe7b84e,
+        transparent: true,
+        opacity: 0.34,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.graceHalo.position.set(0, baseY + 0.7, 0);
+    this.graceHalo.scale.set(0.98, 1.42, 1);
+    this.group.add(this.graceHalo);
+
+    this.graceFlame = new THREE.Group();
+    this.graceFlame.position.set(0, baseY + 0.48, 0);
+    this.graceFlame.scale.setScalar(0.96);
+    const flameTexture = createGraceFlameTexture();
+    const wisps = [
+      { x: 0, y: 0.08, z: 0, sx: 0.48, sy: 1.36, opacity: 0.54, phase: 0, speed: 1.2 },
+      { x: -0.045, y: 0.07, z: 0.03, sx: 0.34, sy: 1.14, opacity: 0.36, phase: 1.7, speed: 1.6 },
+      { x: 0.055, y: 0.06, z: -0.02, sx: 0.28, sy: 0.98, opacity: 0.32, phase: 3.1, speed: 1.45 },
+      { x: 0.02, y: 0.28, z: 0.01, sx: 0.2, sy: 0.64, opacity: 0.3, phase: 4.4, speed: 1.9 },
+    ];
+
+    for (const wisp of wisps) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: flameTexture,
+          color: 0xf2bd4d,
+          transparent: true,
+          opacity: wisp.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      sprite.position.set(wisp.x, wisp.y, wisp.z);
+      sprite.scale.set(wisp.sx, wisp.sy, 1);
+      sprite.userData = {
+        baseX: wisp.x, baseY: wisp.y,
+        baseScaleX: wisp.sx, baseScaleY: wisp.sy,
+        baseOpacity: wisp.opacity,
+        phase: wisp.phase, speed: wisp.speed,
+      };
+      this.graceFlame.add(sprite);
+    }
+    this.group.add(this.graceFlame);
+
+    this.addGraceMotes(baseY);
+  }
+
+  addGraceMotes(baseY) {
+    const count = 52;
+    const positions = new Float32Array(count * 3);
+    this.graceMoteData = [];
+
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.04 + Math.pow(Math.random(), 1.9) * 0.34;
+      const y = Math.random() * 1.58;
+      positions[i * 3] = Math.cos(angle) * radius;
+      positions[i * 3 + 1] = baseY + 0.28 + y;
+      positions[i * 3 + 2] = Math.sin(angle) * radius;
+      this.graceMoteData.push({
+        angle,
+        radius,
+        y,
+        speed: 0.26 + Math.random() * 0.42,
+        wobble: Math.random() * Math.PI * 2,
+        drift: 0.12 + Math.random() * 0.24,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.graceMotes = new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        color: 0xffdc66,
+        map: createRadialGlowTexture('#fff0a8'),
+        size: 0.052,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    this.graceMotes.renderOrder = 32;
+    this.group.add(this.graceMotes);
+  }
+
+  // ── Project markers — four marble obelisks around an inner ring ─
+  addProjectMarkers() {
+    const ringRadius = 3.5;
+    // Remove the two front tablets nearest the camera so back tablets stay open.
+    const angles = [90, 150, 210, 270].map((d) => d * Math.PI / 180);
+    const sharedMarble = createMarbleMaterial({ tint: 0xece5d2, brightness: 1.08, veinStrength: 0.26, speckStrength: 0.25 });
+
+    projectsCatalog.slice(0, angles.length).forEach((project, index) => {
+      const angle = angles[index];
+      const x = Math.sin(angle) * ringRadius;
+      const z = Math.cos(angle) * ringRadius;
+      const marker = new ProjectMarker(project, sharedMarble, 700 + index * 31);
+      marker.position.set(x, -0.92, z);
+      // Face toward the Grace at origin
+      marker.rotation.y = Math.atan2(x, z) + Math.PI;
+      this.markers.push(marker);
+      this.group.add(marker);
+    });
+  }
+
+  addAtmosphere() {
+    // Floating dust motes lit by sunlight — large area, sparse
+    const count = 90;
+    const positions = new Float32Array(count * 3);
+    this.moteData = [];
+    for (let i = 0; i < count; i++) {
+      const radius = 1.5 + Math.random() * 5.5;
+      const angle = Math.random() * Math.PI * 2;
+      positions[i * 3]     = Math.cos(angle) * radius;
+      positions[i * 3 + 1] = Math.random() * 4.5;
+      positions[i * 3 + 2] = Math.sin(angle) * radius;
+      this.moteData.push({
+        baseY: positions[i * 3 + 1],
+        speed: 0.04 + Math.random() * 0.06,
+        wobble: Math.random() * Math.PI * 2,
+      });
+    }
+    const motesGeom = new THREE.BufferGeometry();
+    motesGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.motes = new THREE.Points(
+      motesGeom,
+      new THREE.PointsMaterial({
+        color: 0xfff5d6,
+        size: 0.04,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.group.add(this.motes);
+  }
+
+  addHint() {
+    this.hint = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createHintTexture('Click a tablet to read'),
+        transparent: true,
+        opacity: 0.78,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    this.hint.position.set(0, 2.62, 1.65);
+    this.hint.scale.set(1.82, 0.36, 1);
+    this.hint.renderOrder = 46;
+    this.group.add(this.hint);
+  }
+
+  getCameraConfig() {
+    return {
+      position: [0, 2.55, 6.4],
+      target: [0, 0.45, 0],
+      orbitRadius: 0,
+      orbitSpeed: 0,
+      mouseInfluence: 0.3,
+      bobAmount: 0.018,
+      bobSpeed: 0.32,
+    };
   }
 
   update(t, dt) {
     super.update(t, dt);
-    this.contentObject.rotation.y = -t * 0.36;
+
+    // Grace pulse (same idiom used elsewhere)
+    const pulse = 1 + Math.sin(t * 2.4) * 0.12;
+    this.grace.scale.setScalar(pulse);
+    const baseGraceY = -0.6 + 0.7;
+    this.grace.position.y = baseGraceY + Math.sin(t * 1.7) * 0.025;
+    this.graceHalo.scale.set(0.96 + Math.sin(t * 2.1) * 0.06, 1.4 + Math.sin(t * 1.8) * 0.09, 1);
+    this.graceHalo.material.opacity = 0.3 + Math.sin(t * 2.2) * 0.05;
+    this.gracePool.scale.setScalar(0.86 + Math.sin(t * 1.25) * 0.035);
+    this.gracePool.material.opacity = 0.14 + Math.sin(t * 1.5) * 0.025;
+    this.graceLight.intensity = 2.45 + Math.sin(t * 2.2) * 0.32;
+
+    for (const sprite of this.graceFlame.children) {
+      const data = sprite.userData;
+      const sway   = Math.sin(t * data.speed + data.phase);
+      const breath = Math.sin(t * (data.speed + 0.4) + data.phase * 0.7);
+      sprite.position.x = data.baseX + sway * 0.035;
+      sprite.position.y = data.baseY + breath * 0.035;
+      sprite.scale.set(
+        data.baseScaleX * (1 + breath * 0.12),
+        data.baseScaleY * (1 + sway * 0.08),
+        1
+      );
+      sprite.material.opacity = data.baseOpacity + breath * 0.08;
+    }
+
+    if (this.graceMotes) {
+      const positions = this.graceMotes.geometry.attributes.position;
+      for (let i = 0; i < this.graceMoteData.length; i++) {
+        const mote = this.graceMoteData[i];
+        mote.y += dt * mote.speed;
+        if (mote.y > 2.15) {
+          mote.y = Math.random() * 0.12;
+          mote.radius = 0.04 + Math.pow(Math.random(), 1.9) * 0.34;
+          mote.angle = Math.random() * Math.PI * 2;
+        }
+
+        const angle = mote.angle + t * mote.drift;
+        const wobble = Math.sin(t * 1.7 + mote.wobble) * 0.028;
+        const taper = 1 - THREE.MathUtils.smoothstep(mote.y, 1.45, 2.15) * 0.55;
+        const riseFlutter = Math.sin(t * 3.1 + mote.phase) * 0.018;
+        positions.setXYZ(
+          i,
+          Math.cos(angle) * (mote.radius + wobble) * taper,
+          -0.6 + 0.28 + mote.y + riseFlutter,
+          Math.sin(angle) * (mote.radius + wobble) * taper
+        );
+      }
+      positions.needsUpdate = true;
+      this.graceMotes.material.opacity = 0.82 + Math.sin(t * 2.4) * 0.08;
+    }
+
+    // Markers
+    for (const marker of this.markers) {
+      marker.update(t, this.hoveredMarker === marker, this.focusedMarker === marker);
+    }
+
+    // Hint
+    if (this.hint) {
+      const targetOpacity = this.focusedMarker ? 0 : (0.7 + Math.sin(t * 1.6) * 0.12);
+      this.hint.material.opacity = THREE.MathUtils.lerp(
+        this.hint.material.opacity,
+        targetOpacity,
+        0.06
+      );
+    }
+
+    // Motes drift up
+    if (this.motes) {
+      const positions = this.motes.geometry.attributes.position;
+      for (let i = 0; i < this.moteData.length; i++) {
+        const m = this.moteData[i];
+        let y = positions.getY(i) + m.speed * dt;
+        if (y > 5.0) y = 0;
+        positions.setY(i, y);
+      }
+      positions.needsUpdate = true;
+    }
+
+    this.#updateFocusFade(dt);
+
+    if (this.focusProgress > 0.001 && this.cameraRig) {
+      const camera = this.cameraRig.camera;
+      const eased    = smootherStep(this.focusProgress);
+      const lookEase = smootherStep(Math.max(0, this.focusProgress - 0.08) / 0.92);
+      const rigPosition = camera.position.clone();
+      camera.position.lerpVectors(rigPosition, this.focusCameraPosition, eased);
+      this.currentLookTarget.lerpVectors(this.baseLookTarget, this.focusLookTarget, lookEase);
+      camera.lookAt(this.currentLookTarget);
+    } else {
+      this.currentLookTarget.copy(this.baseLookTarget);
+    }
+  }
+
+  getInteractiveObjects() {
+    return this.markers.map((m) => m.hitbox).filter(Boolean);
+  }
+
+  handleSceneClick(hit) {
+    const marker = this.#markerFromHit(hit);
+    if (marker) this.#openReader(marker);
+    else this.#closeReader();
+  }
+
+  handleSceneMiss() {
+    this.#closeReader();
+  }
+
+  handleSceneHover(hit) {
+    this.hoveredMarker = this.#markerFromHit(hit) ?? null;
+    const renderer = document.querySelector('.three-renderer-canvas');
+    if (renderer) renderer.style.cursor = this.hoveredMarker ? 'pointer' : '';
+  }
+
+  exit() {
+    this.#closeReader();
+    this.focusProgress = 0;
+    const renderer = document.querySelector('.three-renderer-canvas');
+    if (renderer) renderer.style.cursor = '';
+    super.exit();
+  }
+
+  dispose() {
+    this.stoneOverlay?.remove();
+    super.dispose();
+  }
+
+  #markerFromHit(hit) {
+    if (!hit) return null;
+    let object = hit.object;
+    while (object) {
+      if (object.userData?.marker) return object.userData.marker;
+      if (this.markers.includes(object)) return object;
+      object = object.parent;
+    }
+    return null;
+  }
+
+  #openReader(marker) {
+    this.focusedMarker = marker;
+    this.hasOpenedOverlay = false;
+
+    const markerPos = new THREE.Vector3();
+    marker.getWorldPosition(markerPos);
+    const toCamera = new THREE.Vector3()
+      .subVectors(this.baseCameraPosition, markerPos)
+      .setY(0)
+      .normalize();
+    this.focusCameraPosition.copy(markerPos).addScaledVector(toCamera, 2.0).setY(markerPos.y + 1.55);
+    this.focusLookTarget.copy(markerPos).setY(markerPos.y + 0.95);
+  }
+
+  #closeReader() {
+    this.focusedMarker = null;
+    this.hasOpenedOverlay = false;
+    if (this.stoneOverlay) {
+      this.stoneOverlay.classList.remove('is-visible');
+      this.stoneOverlay.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  #updateFocusFade(dt) {
+    const target = this.focusedMarker ? 1 : 0;
+    const speed  = this.focusedMarker ? 1.2 : 1.6;
+    this.focusProgress = THREE.MathUtils.clamp(
+      this.focusProgress + Math.sign(target - this.focusProgress) * dt * speed,
+      0, 1
+    );
+    if (this.focusedMarker && !this.hasOpenedOverlay && this.focusProgress > 0.85) {
+      this.hasOpenedOverlay = true;
+      // Reuse stone-reader populator (year→eyebrow, title→title, body→body)
+      populateStoneReader(this.stoneOverlay, {
+        year: this.focusedMarker.userData.project.eyebrow,
+        title: this.focusedMarker.userData.project.title,
+        body: this.focusedMarker.userData.project.body,
+      });
+      this.stoneOverlay.classList.add('is-visible');
+      this.stoneOverlay.setAttribute('aria-hidden', 'false');
+    }
+  }
+}
+
+// ── ProjectMarker ─────────────────────────────────────────────
+// A tall white-marble tablet on a stepped plinth. Carved face
+// holds the project title + eyebrow; whole thing tilts very
+// slightly forward so the inscription faces the camera.
+class ProjectMarker extends THREE.Group {
+  constructor(project, marbleMaterial, seed) {
+    super();
+    this.project = project;
+    this.userData.project = project;
+    this.userData.marker = this;
+
+    // Stepped plinth
+    const plinthLow = new THREE.Mesh(
+      new THREE.BoxGeometry(1.18, 0.18, 0.78),
+      marbleMaterial
+    );
+    plinthLow.position.y = 0.09;
+    plinthLow.castShadow = true;
+    plinthLow.receiveShadow = true;
+    this.add(plinthLow);
+
+    const plinthHigh = new THREE.Mesh(
+      new THREE.BoxGeometry(1.02, 0.14, 0.66),
+      marbleMaterial
+    );
+    plinthHigh.position.y = 0.18 + 0.07;
+    plinthHigh.castShadow = true;
+    plinthHigh.receiveShadow = true;
+    this.add(plinthHigh);
+
+    // Tablet shaft — tall flat slab
+    const tabletWidth = 0.96;
+    const tabletHeight = 1.7;
+    const tabletDepth = 0.18;
+    const tablet = new THREE.Mesh(
+      new THREE.BoxGeometry(tabletWidth, tabletHeight, tabletDepth),
+      marbleMaterial
+    );
+    tablet.position.y = 0.18 + 0.14 + tabletHeight / 2;
+    tablet.castShadow = true;
+    tablet.receiveShadow = true;
+    this.add(tablet);
+    this.tablet = tablet;
+
+    // Inscribed face — emissive plane mounted on the front of the tablet
+    const inscriptionTex = createProjectPlaqueTexture(project);
+    const inscriptionMat = new THREE.MeshBasicMaterial({
+      map: inscriptionTex,
+      transparent: true,
+      opacity: 1,
+      alphaTest: 0.025,
+      depthWrite: true,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    const inscriptionPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(tabletWidth * 0.9, tabletHeight * 0.88),
+      inscriptionMat
+    );
+    inscriptionPlane.position.set(0, tablet.position.y, tabletDepth / 2 + 0.018);
+    inscriptionPlane.renderOrder = 18;
+    this.add(inscriptionPlane);
+    this.inscriptionMaterial = inscriptionMat;
+
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(tabletWidth * 1.12, 0.16, tabletDepth * 1.65),
+      marbleMaterial
+    );
+    cap.position.y = tablet.position.y + tabletHeight / 2 + 0.08;
+    cap.rotation.z = (seed % 7 - 3) * 0.006;
+    cap.castShadow = true;
+    cap.receiveShadow = true;
+    this.add(cap);
+
+    const topLip = new THREE.Mesh(
+      new THREE.BoxGeometry(tabletWidth * 0.92, 0.055, tabletDepth * 1.32),
+      marbleMaterial
+    );
+    topLip.position.y = cap.position.y + 0.105;
+    topLip.position.x = ((seed % 5) - 2) * 0.012;
+    topLip.rotation.z = -cap.rotation.z * 0.6;
+    topLip.castShadow = true;
+    topLip.receiveShadow = true;
+    this.add(topLip);
+
+    // Generous invisible hitbox around the whole marker
+    const hitbox = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 2.6, 1.2),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+    );
+    hitbox.position.y = 1.1;
+    hitbox.userData.marker = this;
+    this.add(hitbox);
+    this.hitbox = hitbox;
+  }
+
+  update(t, isHovered, isFocused) {
+    this.inscriptionMaterial.opacity = 1;
   }
 }
 
@@ -1552,6 +2370,24 @@ class TimelineStone extends THREE.Group {
     this.textMaterial = textMaterial;
     this.baseEmissive = 0.85;
 
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      map: textTexture,
+      color: 0xffd060,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const glowPlane = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 0.98), glowMaterial);
+    glowPlane.rotation.x = -Math.PI / 2;
+    glowPlane.position.y = 0.392;
+    glowPlane.renderOrder = 42;
+    this.add(glowPlane);
+    this.glowPlane = glowPlane;
+    this.glowMaterial = glowMaterial;
+    this.baseY = null;
+
     // Generous invisible hitbox so clicking near the stone counts
     const hitbox = new THREE.Mesh(
       new THREE.BoxGeometry(2.0, 1.4, 1.6),
@@ -1566,15 +2402,27 @@ class TimelineStone extends THREE.Group {
   }
 
   update(t, isHovered, isFocused) {
+    if (this.baseY === null) this.baseY = this.position.y;
+    const hoverAmount = isFocused ? 1 : isHovered ? 1 : 0;
+    const targetY = this.baseY + hoverAmount * 0.12 + Math.sin(t * 2.6 + this.position.x) * hoverAmount * 0.018;
+    this.position.y = THREE.MathUtils.lerp(this.position.y, targetY, 0.14);
+
     // Hover/focus brightens the etched text
-    const target = isFocused ? 2.2 : isHovered ? 1.55 : this.baseEmissive;
+    const target = isFocused ? 2.75 : isHovered ? 2.45 : this.baseEmissive;
     this.textMaterial.emissiveIntensity = THREE.MathUtils.lerp(
       this.textMaterial.emissiveIntensity,
       target,
-      0.09
+      0.12
     );
+    this.glowMaterial.opacity = THREE.MathUtils.lerp(
+      this.glowMaterial.opacity,
+      isFocused ? 0.82 : isHovered ? 0.68 : 0,
+      0.16
+    );
+    const glowScale = isFocused ? 1.13 : isHovered ? 1.1 : 1;
+    this.glowPlane.scale.setScalar(THREE.MathUtils.lerp(this.glowPlane.scale.x, glowScale, 0.14));
     // Subtle breathing on the etched glyphs
-    this.textMaterial.emissiveIntensity += Math.sin(t * 1.4 + this.position.x * 0.7) * 0.05;
+    this.textMaterial.emissiveIntensity += Math.sin(t * 1.4 + this.position.x * 0.7) * (isHovered || isFocused ? 0.11 : 0.05);
   }
 }
 
@@ -2658,6 +3506,582 @@ function createEtchedStoneTexture(entry) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
   return texture;
+}
+
+// ── Colosseum scene textures ──────────────────────────────────
+
+function createMarbleMaterial({
+  tint = 0xeae3d2,
+  flutedBump = false,
+  brightness = 1,
+  veinStrength = 1,
+  speckStrength = 1,
+} = {}) {
+  const textures = createMarbleTextureSet({ flutedBump, brightness, veinStrength, speckStrength });
+  return new THREE.MeshStandardMaterial({
+    color: tint,
+    map: textures.color,
+    roughnessMap: textures.roughness,
+    bumpMap: textures.bump,
+    bumpScale: flutedBump ? 0.12 : 0.05,
+    roughness: 0.82,
+    metalness: 0.015,
+  });
+}
+
+function createRuinedArchGeometry(width = 1.34, height = 2.35, depth = 0.24) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, -height / 2);
+  shape.lineTo(width / 2, -height / 2);
+  shape.lineTo(width / 2, height / 2);
+  shape.lineTo(-width / 2, height / 2);
+  shape.lineTo(-width / 2, -height / 2);
+
+  const holeWidth = width * 0.56;
+  const baseY = -height / 2 + 0.16;
+  const springY = -height * 0.04;
+  const hole = new THREE.Path();
+  hole.moveTo(-holeWidth / 2, baseY);
+  hole.lineTo(-holeWidth / 2, springY);
+  hole.absarc(0, springY, holeWidth / 2, Math.PI, 0, true);
+  hole.lineTo(holeWidth / 2, baseY);
+  hole.lineTo(-holeWidth / 2, baseY);
+  shape.holes.push(hole);
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: 0.025,
+    bevelSize: 0.025,
+    bevelSegments: 1,
+  });
+  geometry.center();
+  return geometry;
+}
+
+function createMarbleTextureSet({
+  flutedBump = false,
+  brightness = 1,
+  veinStrength = 1,
+  speckStrength = 1,
+} = {}) {
+  const size = 512;
+  const colorCanvas = document.createElement('canvas');
+  const roughnessCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = size;
+  roughnessCanvas.width = roughnessCanvas.height = size;
+  bumpCanvas.width = bumpCanvas.height = size;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughnessCtx = roughnessCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(size, size);
+  const roughnessImage = roughnessCtx.createImageData(size, size);
+  const bumpImage = bumpCtx.createImageData(size, size);
+  const random = seededRandom(33179);
+
+  // Layered sine bands give the long marble vein look
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const nx = x / size;
+      const ny = y / size;
+      const veinA = Math.abs(Math.sin(nx * 14 + Math.cos(ny * 6) * 1.8));
+      const veinB = Math.abs(Math.sin(ny * 18 - Math.cos(nx * 4) * 1.4));
+      const grain = random();
+      const speck = random() > 0.992 ? 0.4 : 0;
+      const broad = Math.sin(nx * 4 + ny * 3) * 0.5 + 0.5;
+
+      const value =
+        214 +                       // aged marble base
+        broad * 14 -                // broad warm/cool variation
+        Math.pow(veinA, 4) * 38 * veinStrength -   // dark veins
+        Math.pow(veinB, 5) * 30 * veinStrength -
+        speck * 80 * speckStrength +
+        grain * 8;
+
+      const rB = Math.max(168, Math.min(252, value * brightness));
+      const gB = Math.max(164, Math.min(250, (value - 3) * brightness));
+      const bB = Math.max(154, Math.min(246, (value - 12) * brightness));   // slight warm tint
+      colorImage.data[i]     = rB;
+      colorImage.data[i + 1] = gB;
+      colorImage.data[i + 2] = bB;
+      colorImage.data[i + 3] = 255;
+
+      const roughness = 158 + grain * 28 + Math.pow(veinA, 3) * 22 * veinStrength;
+      roughnessImage.data[i]     = roughness;
+      roughnessImage.data[i + 1] = roughness;
+      roughnessImage.data[i + 2] = roughness;
+      roughnessImage.data[i + 3] = 255;
+
+      // Bump: subtle by default. For column shafts, add vertical fluting.
+      let bump = 132 + grain * 18 - Math.pow(veinA, 4) * 24 * veinStrength;
+      if (flutedBump) {
+        // Sinusoidal vertical channels — read as classical fluting
+        const flute = Math.cos(nx * Math.PI * 2 * 9);  // 9 flutes around the wrap
+        bump += flute * 56;
+      }
+      bumpImage.data[i]     = bump;
+      bumpImage.data[i + 1] = bump;
+      bumpImage.data[i + 2] = bump;
+      bumpImage.data[i + 3] = 255;
+    }
+  }
+
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughnessCtx.putImageData(roughnessImage, 0, 0);
+  bumpCtx.putImageData(bumpImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughnessCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((t) => {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(1, 1);
+    t.anisotropy = 8;
+  });
+  return { color, roughness, bump };
+}
+
+function createSandTerrainGeometry(size = 120, segments = 180) {
+  const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
+  const positions = geometry.attributes.position;
+  const noise = createValueNoise2D(92821);
+
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const y = positions.getY(i);
+    const radius = Math.sqrt(x * x + y * y);
+    const centerFade = THREE.MathUtils.smoothstep(radius, 6.5, 13.5);
+    const distanceFade = 1 - THREE.MathUtils.smoothstep(radius, 42, 60);
+    const broad = noise.fbm(x * 0.045 + 12.3, y * 0.045 - 4.8, 5);
+    const mid = noise.fbm(x * 0.16 - 5.2, y * 0.16 + 7.6, 4);
+    const ripple = Math.sin(x * 0.34 + noise.fbm(x * 0.025, y * 0.025, 3) * 4.2) * 0.012;
+    const height = ((broad - 0.5) * 0.42 + (mid - 0.5) * 0.12 + ripple) * centerFade * distanceFade;
+    positions.setZ(i, height);
+  }
+
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createValueNoise2D(seed = 1) {
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const fade = (t) => t * t * (3 - 2 * t);
+  const hash = (ix, iy) => {
+    let n = ix * 374761393 + iy * 668265263 + seed * 1442695041;
+    n = (n ^ (n >> 13)) * 1274126177;
+    return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+  };
+  const noise = (x, y) => {
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const xf = fade(x - x0);
+    const yf = fade(y - y0);
+    const a = hash(x0, y0);
+    const b = hash(x0 + 1, y0);
+    const c = hash(x0, y0 + 1);
+    const d = hash(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, xf), lerp(c, d, xf), yf);
+  };
+  const fbm = (x, y, octaves = 5) => {
+    let value = 0;
+    let amp = 0.5;
+    let freq = 1;
+    let total = 0;
+    for (let octave = 0; octave < octaves; octave++) {
+      value += noise(x * freq, y * freq) * amp;
+      total += amp;
+      amp *= 0.5;
+      freq *= 2.08;
+    }
+    return value / total;
+  };
+  return { noise, fbm };
+}
+
+function createSandstoneFloorTextureSet() {
+  const size = 2048;
+  const colorCanvas = document.createElement('canvas');
+  const roughnessCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = size;
+  roughnessCanvas.width = roughnessCanvas.height = size;
+  bumpCanvas.width = bumpCanvas.height = size;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughnessCtx = roughnessCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(size, size);
+  const roughnessImage = roughnessCtx.createImageData(size, size);
+  const bumpImage = bumpCtx.createImageData(size, size);
+  const random = seededRandom(40117);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const fade = (t) => t * t * (3 - 2 * t);
+  const hash = (ix, iy) => {
+    let n = ix * 374761393 + iy * 668265263;
+    n = (n ^ (n >> 13)) * 1274126177;
+    return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+  };
+  const noise = (x, y) => {
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const xf = fade(x - x0);
+    const yf = fade(y - y0);
+    const a = hash(x0, y0);
+    const b = hash(x0 + 1, y0);
+    const c = hash(x0, y0 + 1);
+    const d = hash(x0 + 1, y0 + 1);
+    return lerp(lerp(a, b, xf), lerp(c, d, xf), yf);
+  };
+  const fbm = (x, y) => {
+    let value = 0;
+    let amp = 0.5;
+    let freq = 1;
+    let total = 0;
+    for (let octave = 0; octave < 5; octave++) {
+      value += noise(x * freq, y * freq) * amp;
+      total += amp;
+      amp *= 0.5;
+      freq *= 2.15;
+    }
+    return value / total;
+  };
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const nx = x / size;
+      const ny = y / size;
+      const broad = fbm(nx * 9.5 + 9.5, ny * 9.5 - 2.1);
+      const fine = fbm(nx * 118.0, ny * 118.0);
+      const extraFine = fbm(nx * 280.0 + 4.8, ny * 280.0 - 7.1);
+      const grit = random();
+      const paleGrain = random() > 0.972 ? 1 : 0;
+      const darkGrain = random() > 0.982 ? 1 : 0;
+      const tinyShadow = Math.max(0, fine - 0.62) * 0.18;
+      const saltPepper = (extraFine - 0.5) * 0.16;
+      const shade = 0.9 + (broad - 0.5) * 0.16 + (fine - 0.5) * 0.16 + saltPepper + grit * 0.07 - darkGrain * 0.22;
+
+      colorImage.data[i] = Math.max(158, Math.min(244, 202 * shade + paleGrain * 34));
+      colorImage.data[i + 1] = Math.max(136, Math.min(226, 184 * shade + paleGrain * 28));
+      colorImage.data[i + 2] = Math.max(102, Math.min(190, 142 * shade + paleGrain * 16));
+      colorImage.data[i + 3] = 255;
+
+      const roughness = 218 + fine * 28 + extraFine * 24 + grit * 20 - paleGrain * 16;
+      roughnessImage.data[i]     = roughness;
+      roughnessImage.data[i + 1] = roughness;
+      roughnessImage.data[i + 2] = roughness;
+      roughnessImage.data[i + 3] = 255;
+
+      const bump = 104 + broad * 28 + fine * 58 + extraFine * 72 + paleGrain * 60 - tinyShadow * 60 - darkGrain * 32;
+      bumpImage.data[i]     = bump;
+      bumpImage.data[i + 1] = bump;
+      bumpImage.data[i + 2] = bump;
+      bumpImage.data[i + 3] = 255;
+    }
+  }
+
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughnessCtx.putImageData(roughnessImage, 0, 0);
+  bumpCtx.putImageData(bumpImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughnessCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((t) => {
+    t.wrapS = THREE.ClampToEdgeWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.repeat.set(1, 1);
+    t.anisotropy = 8;
+  });
+  return { color, roughness, bump };
+}
+
+function createColosseumSkyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 2048;
+  const ctx = canvas.getContext('2d');
+
+  // Bright daytime gradient: pale blue zenith → warm haze at horizon
+  const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  sky.addColorStop(0.00, '#8fc5ef');
+  sky.addColorStop(0.24, '#b9dbf0');
+  sky.addColorStop(0.48, '#e6dfc7');
+  sky.addColorStop(0.68, '#efd9a7');
+  sky.addColorStop(0.86, '#d6b879');
+  sky.addColorStop(1.00, '#b98e4b');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Sun disc + halo
+  const sunX = 1320;
+  const sunY = 360;
+  const sunHalo = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 1040);
+  sunHalo.addColorStop(0.00, 'rgba(255, 250, 220, 0.95)');
+  sunHalo.addColorStop(0.10, 'rgba(255, 246, 204, 0.72)');
+  sunHalo.addColorStop(0.36, 'rgba(255, 228, 168, 0.26)');
+  sunHalo.addColorStop(1.00, 'rgba(255, 220, 160, 0)');
+  ctx.fillStyle = sunHalo;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const rays = ctx.createLinearGradient(sunX - 280, 0, sunX - 760, canvas.height);
+  rays.addColorStop(0.00, 'rgba(255, 248, 215, 0.22)');
+  rays.addColorStop(0.34, 'rgba(255, 238, 190, 0.08)');
+  rays.addColorStop(1.00, 'rgba(255, 238, 190, 0)');
+  ctx.fillStyle = rays;
+  ctx.beginPath();
+  ctx.moveTo(sunX - 210, 0);
+  ctx.lineTo(sunX + 70, 0);
+  ctx.lineTo(sunX - 520, canvas.height);
+  ctx.lineTo(sunX - 1180, canvas.height);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  const haze = ctx.createLinearGradient(0, canvas.height * 0.48, 0, canvas.height * 0.82);
+  haze.addColorStop(0, 'rgba(255,255,255,0)');
+  haze.addColorStop(0.54, 'rgba(255,232,178,0.22)');
+  haze.addColorStop(1, 'rgba(244,206,132,0.34)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, canvas.height * 0.42, canvas.width, canvas.height * 0.44);
+
+  // Soft cumulus clouds
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(44px)';
+  const random = seededRandom(2447);
+  for (let band = 0; band < 4; band++) {
+    const y = canvas.height * (0.12 + band * 0.1) + (random() - 0.5) * 80;
+    for (let i = 0; i < 22; i++) {
+      const x = random() * canvas.width;
+      const rx = 170 + random() * 380;
+      const ry = 36 + random() * 72;
+      ctx.fillStyle = `rgba(255, 252, 244, ${0.07 + random() * 0.11})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y + (random() - 0.5) * 70, rx, ry, (random() - 0.5) * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+      if (x < rx) {
+        ctx.beginPath();
+        ctx.ellipse(x + canvas.width, y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  return texture;
+}
+
+function createHorizonMistTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, 'rgba(255, 238, 190, 0)');
+  gradient.addColorStop(0.36, 'rgba(255, 236, 184, 0.36)');
+  gradient.addColorStop(0.58, 'rgba(246, 213, 154, 0.58)');
+  gradient.addColorStop(0.82, 'rgba(238, 194, 118, 0.18)');
+  gradient.addColorStop(1, 'rgba(238, 194, 118, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const random = seededRandom(8821);
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(18px)';
+  for (let i = 0; i < 18; i++) {
+    ctx.fillStyle = `rgba(255,255,245,${0.06 + random() * 0.08})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      random() * canvas.width,
+      canvas.height * (0.34 + random() * 0.35),
+      90 + random() * 180,
+      10 + random() * 26,
+      (random() - 0.5) * 0.2,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createGroundHazeTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d');
+  const center = canvas.width / 2;
+
+  const radial = ctx.createRadialGradient(center, center, 0, center, center, center);
+  radial.addColorStop(0.00, 'rgba(255, 238, 190, 0)');
+  radial.addColorStop(0.18, 'rgba(255, 238, 190, 0)');
+  radial.addColorStop(0.34, 'rgba(255, 234, 181, 0.08)');
+  radial.addColorStop(0.52, 'rgba(246, 218, 166, 0.22)');
+  radial.addColorStop(0.72, 'rgba(238, 204, 139, 0.34)');
+  radial.addColorStop(0.90, 'rgba(238, 204, 139, 0.2)');
+  radial.addColorStop(1.00, 'rgba(238, 204, 139, 0)');
+  ctx.fillStyle = radial;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const random = seededRandom(5611);
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(22px)';
+  for (let i = 0; i < 34; i++) {
+    const angle = random() * Math.PI * 2;
+    const radius = canvas.width * (0.28 + random() * 0.34);
+    const x = center + Math.cos(angle) * radius;
+    const y = center + Math.sin(angle) * radius;
+    ctx.fillStyle = `rgba(255, 246, 218, ${0.04 + random() * 0.06})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      x,
+      y,
+      120 + random() * 260,
+      34 + random() * 90,
+      angle + Math.PI / 2,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function createProjectPlaqueTexture(project) {
+  const w = 768;
+  const h = 1280;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+
+  const panel = ctx.createLinearGradient(0, 80, 0, h - 90);
+  panel.addColorStop(0, 'rgba(45, 35, 20, 0.32)');
+  panel.addColorStop(0.48, 'rgba(34, 25, 15, 0.52)');
+  panel.addColorStop(1, 'rgba(48, 36, 20, 0.3)');
+  ctx.fillStyle = panel;
+  roundedRect(ctx, 42, 68, w - 84, h - 136, 18);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(26, 19, 11, 0.7)';
+  ctx.lineWidth = 8;
+  roundedRect(ctx, 42, 68, w - 84, h - 136, 18);
+  ctx.stroke();
+
+  // Decorative rule lines
+  ctx.strokeStyle = 'rgba(255, 224, 126, 0.88)';
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.moveTo(60, 110);
+  ctx.lineTo(w - 60, 110);
+  ctx.stroke();
+
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(245, 205, 112, 0.62)';
+  ctx.beginPath();
+  ctx.moveTo(180, h - 110);
+  ctx.lineTo(w - 180, h - 110);
+  ctx.stroke();
+
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.82)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 5;
+
+  // Eyebrow (small italic header — e.g. "Hackathon · 2024")
+  ctx.fillStyle = 'rgba(250, 218, 132, 0.98)';
+  ctx.font = 'italic 500 52px "Cormorant Garamond", Georgia, serif';
+  ctx.fillText(project.eyebrow ?? '', w / 2, 200);
+
+  // Title — multi-line wrap if needed
+  ctx.fillStyle = 'rgba(255, 232, 138, 1)';
+  ctx.font = '700 98px "Cormorant Garamond", "EB Garamond", Georgia, serif';
+  const titleLines = wrapText(ctx, project.title, w - 112, 98);
+  const titleStartY = h * 0.42 - (titleLines.length - 1) * 50;
+  titleLines.forEach((line, i) => {
+    ctx.strokeStyle = 'rgba(18, 12, 6, 0.78)';
+    ctx.lineWidth = 6;
+    ctx.strokeText(line, w / 2, titleStartY + i * 108);
+    ctx.fillText(line, w / 2, titleStartY + i * 108);
+  });
+
+  // Carved fleur / decorative dot
+  ctx.fillStyle = 'rgba(245, 204, 102, 0.86)';
+  ctx.beginPath();
+  ctx.arc(w / 2, h * 0.74, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // "Click to read" mini hint at the bottom
+  ctx.fillStyle = 'rgba(236, 205, 140, 0.82)';
+  ctx.font = 'italic 400 34px "Cormorant Garamond", Georgia, serif';
+  ctx.fillText('Inscribed · click to read', w / 2, h * 0.86);
+
+  // Weathered grain
+  const random = seededRandom(project.title.length * 91 + (project.eyebrow?.length ?? 0));
+  ctx.shadowColor = 'transparent';
+  ctx.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < 360; i++) {
+    ctx.fillStyle = `rgba(245, 225, 170, ${0.015 + random() * 0.045})`;
+    ctx.fillRect(random() * w, random() * h, 1.2 + random() * 1.6, 1.2 + random() * 1.6);
+    ctx.fillStyle = `rgba(0,0,0,${0.025 + random() * 0.08})`;
+    ctx.fillRect(random() * w, random() * h, 1.2 + random() * 1.6, 1.2 + random() * 1.6);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function wrapText(ctx, text, maxWidth, fontSize) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 function drawFlameLobe(ctx, { color, blur, width, yTop, yBottom }) {

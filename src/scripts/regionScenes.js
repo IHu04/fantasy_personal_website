@@ -2197,6 +2197,7 @@ class ContactScene extends RegionScene {
   signFocusProgress = 0;
   hasOpenedSignOverlay = false;
 
+  torches = [];
   motes = null;
 
   init() {
@@ -2244,7 +2245,7 @@ class ContactScene extends RegionScene {
   }
 
   addFloor() {
-    const geometry = new THREE.PlaneGeometry(28, 28, 1, 1);
+    const geometry = new THREE.PlaneGeometry(34, 34, 1, 1);
     geometry.rotateX(-Math.PI / 2);
     const textures = createCastleFloorTextureSet();
     const floor = new THREE.Mesh(
@@ -2254,8 +2255,8 @@ class ContactScene extends RegionScene {
         map: textures.color,
         roughnessMap: textures.roughness,
         bumpMap: textures.bump,
-        bumpScale: 0.06,
-        roughness: 0.95,
+        bumpScale: 0.08,
+        roughness: 0.94,
         metalness: 0.04,
       })
     );
@@ -2265,80 +2266,202 @@ class ContactScene extends RegionScene {
   }
 
   addCurvedWall() {
-    const wallRadius = 7.2;
-    const wallHeight = 4.6;
+    // A fully enclosed castle hall — the camera stands inside the cylinder.
+    // The wall is tall enough that it fills the upper view frame even when
+    // looking up moderately, with crenellated battlements at the top.
+    const wallRadius = 8.4;
+    const wallHeight = 9.0;
+    const floorY = -0.95;
     const stone = createCastleWallTextureSet();
+    stone.color.repeat.set(14, 2.4);
+    stone.roughness.repeat.set(14, 2.4);
+    stone.bump.repeat.set(14, 2.4);
 
     const wallMaterial = new THREE.MeshStandardMaterial({
-      color: 0x76808d,
+      color: 0x6f7986,
       map: stone.color,
       roughnessMap: stone.roughness,
       bumpMap: stone.bump,
-      bumpScale: 0.18,
-      roughness: 0.95,
+      bumpScale: 0.2,
+      roughness: 0.96,
       metalness: 0.05,
-      side: THREE.DoubleSide,
+      side: THREE.BackSide,
     });
 
-    // Main curved wall — partial cylinder, opening faces +Z (camera side)
     const wallGeom = new THREE.CylinderGeometry(
       wallRadius, wallRadius, wallHeight,
-      96, 1, true,
-      Math.PI / 4, 3 * Math.PI / 2
+      120, 1, true
     );
     const wall = new THREE.Mesh(wallGeom, wallMaterial);
-    wall.position.y = -0.95 + wallHeight / 2;
-    wall.castShadow = true;
+    wall.position.y = floorY + wallHeight / 2;
     wall.receiveShadow = true;
     this.group.add(wall);
 
-    // Heavier base/plinth ring
     const trim = createCastleTrimTextureSet();
+    trim.color.repeat.set(14, 1);
+    trim.roughness.repeat.set(14, 1);
+    trim.bump.repeat.set(14, 1);
+
     const trimMaterial = new THREE.MeshStandardMaterial({
-      color: 0x5d646e,
+      color: 0x565d68,
       map: trim.color,
       roughnessMap: trim.roughness,
       bumpMap: trim.bump,
-      bumpScale: 0.1,
+      bumpScale: 0.14,
       roughness: 0.96,
       metalness: 0.04,
       side: THREE.DoubleSide,
     });
 
+    // Heavy plinth around the base
     const plinthGeom = new THREE.CylinderGeometry(
-      wallRadius + 0.16, wallRadius + 0.18, 0.62,
-      96, 1, true,
-      Math.PI / 4, 3 * Math.PI / 2
+      wallRadius + 0.22, wallRadius + 0.26, 0.78,
+      120, 1, true
     );
     const plinth = new THREE.Mesh(plinthGeom, trimMaterial);
-    plinth.position.y = -0.95 + 0.31;
-    plinth.castShadow = true;
+    plinth.position.y = floorY + 0.39;
     plinth.receiveShadow = true;
+    plinth.material.side = THREE.DoubleSide;
     this.group.add(plinth);
+    // Inner-facing variant so the plinth reads from inside the room
+    const plinthInner = new THREE.Mesh(
+      new THREE.CylinderGeometry(wallRadius - 0.04, wallRadius - 0.02, 0.78, 120, 1, true),
+      trimMaterial
+    );
+    plinthInner.position.y = floorY + 0.39;
+    plinthInner.material.side = THREE.BackSide;
+    this.group.add(plinthInner);
 
-    // Cornice / chair-rail band part way up
+    // Mid-wall string course (chair-rail band)
     const railGeom = new THREE.CylinderGeometry(
-      wallRadius + 0.12, wallRadius + 0.12, 0.18,
-      96, 1, true,
-      Math.PI / 4, 3 * Math.PI / 2
+      wallRadius - 0.04, wallRadius - 0.04, 0.22,
+      120, 1, true
     );
     const rail = new THREE.Mesh(railGeom, trimMaterial);
-    rail.position.y = -0.95 + 1.4;
-    rail.castShadow = true;
-    rail.receiveShadow = true;
+    rail.position.y = floorY + 2.55;
+    rail.material.side = THREE.BackSide;
     this.group.add(rail);
 
-    // Crenellated / capped cornice at the top
-    const capGeom = new THREE.CylinderGeometry(
-      wallRadius + 0.22, wallRadius + 0.16, 0.4,
-      96, 1, true,
-      Math.PI / 4, 3 * Math.PI / 2
+    // Top cornice that the merlons sit on
+    const corniceGeom = new THREE.CylinderGeometry(
+      wallRadius - 0.04, wallRadius - 0.04, 0.42,
+      120, 1, true
     );
-    const cap = new THREE.Mesh(capGeom, trimMaterial);
-    cap.position.y = -0.95 + wallHeight - 0.05;
-    cap.castShadow = true;
-    cap.receiveShadow = true;
-    this.group.add(cap);
+    const cornice = new THREE.Mesh(corniceGeom, trimMaterial);
+    cornice.position.y = floorY + wallHeight - 0.21;
+    cornice.material.side = THREE.BackSide;
+    this.group.add(cornice);
+
+    // Vertical buttresses jutting into the room — 8 evenly spaced columns
+    const buttressCount = 8;
+    const buttressInset = 0.34;
+    const buttressInnerRadius = wallRadius - buttressInset;
+    for (let i = 0; i < buttressCount; i++) {
+      const angle = (i / buttressCount) * Math.PI * 2;
+      const x = Math.sin(angle) * buttressInnerRadius;
+      const z = Math.cos(angle) * buttressInnerRadius;
+
+      const buttress = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, wallHeight - 0.6, 0.55),
+        trimMaterial
+      );
+      buttress.position.set(x, floorY + (wallHeight - 0.6) / 2, z);
+      buttress.lookAt(0, buttress.position.y, 0);
+      buttress.castShadow = true;
+      buttress.receiveShadow = true;
+      this.group.add(buttress);
+
+      // Capital block at the top of each buttress
+      const capital = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.32, 0.7),
+        trimMaterial
+      );
+      capital.position.set(x, floorY + wallHeight - 0.78, z);
+      capital.lookAt(0, capital.position.y, 0);
+      capital.castShadow = true;
+      this.group.add(capital);
+
+      // Base block
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 0.4, 0.72),
+        trimMaterial
+      );
+      base.position.set(x, floorY + 0.2, z);
+      base.lookAt(0, base.position.y, 0);
+      base.castShadow = true;
+      base.receiveShadow = true;
+      this.group.add(base);
+    }
+
+    // Crenellated battlements (merlons) along the top of the wall
+    const merlonCount = 56;
+    const merlonInnerRadius = wallRadius - 0.02;
+    for (let i = 0; i < merlonCount; i++) {
+      if (i % 2 === 1) continue; // alternate gaps create the crenellation
+      const angle = (i / merlonCount) * Math.PI * 2;
+      const x = Math.sin(angle) * merlonInnerRadius;
+      const z = Math.cos(angle) * merlonInnerRadius;
+      const merlon = new THREE.Mesh(
+        new THREE.BoxGeometry(0.62, 0.7, 0.34),
+        trimMaterial
+      );
+      merlon.position.set(x, floorY + wallHeight + 0.35, z);
+      merlon.lookAt(0, merlon.position.y, 0);
+      merlon.castShadow = true;
+      this.group.add(merlon);
+    }
+
+    // Recessed window niches with a faint cool glow — suggestion of moonlight
+    // spilling in from outside.
+    const windowAngles = [Math.PI * 0.0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+    for (const angle of windowAngles) {
+      const niche = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.55, 1.6),
+        new THREE.MeshBasicMaterial({
+          color: 0x586f99,
+          transparent: true,
+          opacity: 0.78,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      niche.position.set(
+        Math.sin(angle) * (wallRadius - 0.05),
+        floorY + 4.2,
+        Math.cos(angle) * (wallRadius - 0.05)
+      );
+      niche.lookAt(0, niche.position.y, 0);
+      this.group.add(niche);
+
+      // Subtle volumetric glow extending into the room from the niche
+      const beam = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: createRadialGlowTexture('rgba(140, 180, 230, 0.85)'),
+          color: 0x8fb6e2,
+          transparent: true,
+          opacity: 0.42,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      beam.position.copy(niche.position);
+      beam.scale.set(2.2, 3.2, 1);
+      this.group.add(beam);
+    }
+
+    // Wall-mounted torches at four points to break up the cool blue with
+    // pools of warm flame light
+    const torchAngles = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75];
+    for (const angle of torchAngles) {
+      const torchInnerRadius = wallRadius - 0.16;
+      const x = Math.sin(angle) * torchInnerRadius;
+      const z = Math.cos(angle) * torchInnerRadius;
+      const torch = createWallTorch();
+      torch.group.position.set(x, floorY + 3.1, z);
+      torch.group.lookAt(0, torch.group.position.y, 0);
+      this.group.add(torch.group);
+      this.torches.push(torch);
+    }
   }
 
   addSiteOfGrace() {
@@ -2442,17 +2565,22 @@ class ContactScene extends RegionScene {
     this.signClickable.userData.clickTarget = 'sign';
     this.signGroup.add(this.signClickable);
 
-    // Floating hint — small text prompt
+    // Floating hint — centered directly above the sign post
     this.signHint = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: createHintTexture('Click sign to send word'),
         transparent: true,
-        opacity: 0.82,
+        opacity: 0.86,
         depthWrite: false,
+        depthTest: false,
       })
     );
-    const worldPos = this.signGroup.position.clone();
-    this.signHint.position.set(worldPos.x + 0.2, worldPos.y + 2.65, worldPos.z + 0.1);
+    this.signHint.renderOrder = 38;
+    this.signHint.position.set(
+      this.signGroup.position.x,
+      this.signGroup.position.y + 2.6,
+      this.signGroup.position.z
+    );
     this.signHint.scale.set(1.7, 0.34, 1);
     this.group.add(this.signHint);
   }
@@ -2586,6 +2714,9 @@ class ContactScene extends RegionScene {
       this.signOverlay?.classList.add('is-visible');
       this.signOverlay?.setAttribute('aria-hidden', 'false');
     }
+
+    // Wall torch flicker
+    for (const torch of this.torches) torch.update(t);
 
     // Ambient motes
     if (this.motes) {
@@ -6285,7 +6416,8 @@ function createCastleTrimTextureSet() {
 }
 
 function createCastleFloorTextureSet() {
-  // Large flagstones with mortar between — cool damp stone tones
+  // Long rectangular flagstones laid in a running-bond pattern (each row
+  // offset by half a stone). Clearly read as stone slabs, not jittered tiles.
   const size = 1024;
   const colorCanvas = document.createElement('canvas');
   const roughCanvas = document.createElement('canvas');
@@ -6297,74 +6429,82 @@ function createCastleFloorTextureSet() {
   const bumpCtx = bumpCanvas.getContext('2d');
   const random = seededRandom(64217);
 
-  colorCtx.fillStyle = '#1a1d22';
+  // Mortar background — dark and slightly recessed
+  colorCtx.fillStyle = '#181b22';
   colorCtx.fillRect(0, 0, size, size);
-  roughCtx.fillStyle = 'rgb(238, 238, 238)';
+  roughCtx.fillStyle = 'rgb(244, 244, 244)';
   roughCtx.fillRect(0, 0, size, size);
-  bumpCtx.fillStyle = 'rgb(58, 58, 58)';
+  bumpCtx.fillStyle = 'rgb(54, 54, 54)';
   bumpCtx.fillRect(0, 0, size, size);
 
-  // Irregular tile placement — 4x4 grid with jittered tile borders
-  const tilesPerSide = 4;
-  const cell = size / tilesPerSide;
-  const mortar = 8;
-  for (let ry = 0; ry < tilesPerSide; ry++) {
-    for (let rx = 0; rx < tilesPerSide; rx++) {
-      const jitter = 10;
-      const x = rx * cell + mortar + (random() - 0.5) * jitter;
-      const y = ry * cell + mortar + (random() - 0.5) * jitter;
-      const tw = cell - mortar * 2 + (random() - 0.5) * 16;
-      const th = cell - mortar * 2 + (random() - 0.5) * 16;
+  // Stone dimensions — each course is half as tall as it is wide
+  const stoneW = 256; // four stones per row width
+  const stoneH = 128; // eight courses tall
+  const mortar = 5;
 
-      const tone = 90 + random() * 32;
-      const r = tone + (random() - 0.5) * 12;
+  for (let row = 0; row * stoneH < size + stoneH; row++) {
+    const offset = row % 2 === 0 ? 0 : stoneW / 2;
+    for (let col = -1; col * stoneW + offset < size + stoneW; col++) {
+      const x = col * stoneW + offset + mortar;
+      const y = row * stoneH + mortar;
+      const sw = stoneW - mortar * 2;
+      const sh = stoneH - mortar * 2;
+
+      // Cool grey-blue stone tone with subtle variance
+      const tone = 100 + random() * 28;
+      const r = tone + (random() - 0.5) * 10;
       const g = tone + 4 + (random() - 0.5) * 10;
-      const b = tone + 16 + (random() - 0.5) * 12;
+      const b = tone + 18 + (random() - 0.5) * 12;
 
+      // Stone face
       colorCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      colorCtx.fillRect(x, y, tw, th);
+      colorCtx.fillRect(x, y, sw, sh);
 
-      // Bevel
-      colorCtx.fillStyle = `rgba(${r + 18}, ${g + 18}, ${b + 18}, 0.35)`;
-      colorCtx.fillRect(x, y, tw, 2);
-      colorCtx.fillStyle = `rgba(${Math.max(0, r - 26)}, ${Math.max(0, g - 26)}, ${Math.max(0, b - 26)}, 0.4)`;
-      colorCtx.fillRect(x, y + th - 2, tw, 2);
+      // Bevel highlight (top + left)
+      colorCtx.fillStyle = `rgba(${r + 22}, ${g + 22}, ${b + 22}, 0.42)`;
+      colorCtx.fillRect(x, y, sw, 2);
+      colorCtx.fillRect(x, y, 2, sh);
 
-      // Cracks
-      if (random() > 0.6) {
+      // Bevel shadow (bottom + right)
+      colorCtx.fillStyle = `rgba(${Math.max(0, r - 28)}, ${Math.max(0, g - 28)}, ${Math.max(0, b - 28)}, 0.5)`;
+      colorCtx.fillRect(x, y + sh - 2, sw, 2);
+      colorCtx.fillRect(x + sw - 2, y, 2, sh);
+
+      // Faint diagonal crack on some stones
+      if (random() > 0.7) {
         colorCtx.save();
-        colorCtx.globalAlpha = 0.5;
-        colorCtx.strokeStyle = `rgba(${20 + random() * 26}, ${24 + random() * 26}, ${36 + random() * 26}, 0.7)`;
-        colorCtx.lineWidth = 1 + random();
+        colorCtx.globalAlpha = 0.45;
+        colorCtx.strokeStyle = `rgba(${24 + random() * 24}, ${28 + random() * 24}, ${44 + random() * 24}, 0.85)`;
+        colorCtx.lineWidth = 1 + random() * 0.6;
         colorCtx.beginPath();
-        const sx = x + random() * tw;
-        const sy = y + random() * th;
+        const sx = x + random() * sw;
+        const sy = y + random() * sh;
         colorCtx.moveTo(sx, sy);
-        for (let k = 0; k < 4; k++) {
-          colorCtx.lineTo(sx + (random() - 0.5) * tw * 0.6, sy + (random() - 0.5) * th * 0.6);
+        for (let k = 0; k < 3; k++) {
+          colorCtx.lineTo(sx + (random() - 0.4) * sw * 0.7, sy + (random() - 0.4) * sh * 0.7);
         }
         colorCtx.stroke();
         colorCtx.restore();
       }
 
-      // Pitting
+      // Pitting / weathering specks
       colorCtx.save();
       colorCtx.globalAlpha = 0.18;
-      for (let s = 0; s < 22; s++) {
-        colorCtx.fillStyle = `rgb(${30 + random() * 40}, ${34 + random() * 40}, ${50 + random() * 40})`;
-        colorCtx.fillRect(x + random() * tw, y + random() * th, 1 + random() * 2.5, 1 + random() * 2);
+      for (let s = 0; s < 28; s++) {
+        colorCtx.fillStyle = `rgb(${30 + random() * 40}, ${34 + random() * 40}, ${52 + random() * 40})`;
+        colorCtx.fillRect(x + random() * sw, y + random() * sh, 1 + random() * 2.5, 1 + random() * 2);
       }
       colorCtx.restore();
 
-      // Damp moss in mortar joints sometimes
-      if (random() > 0.78) {
+      // Damp moss in joints occasionally
+      if (random() > 0.82) {
         colorCtx.save();
-        colorCtx.globalAlpha = 0.38;
-        colorCtx.fillStyle = `rgb(${30 + random() * 16}, ${56 + random() * 24}, ${42 + random() * 16})`;
+        colorCtx.globalAlpha = 0.42;
+        colorCtx.fillStyle = `rgb(${30 + random() * 16}, ${58 + random() * 24}, ${42 + random() * 16})`;
         colorCtx.beginPath();
         colorCtx.ellipse(
-          x + random() * tw,
-          y + th - 1 + random() * 4,
+          x + random() * sw,
+          y + sh - 1 + random() * 4,
           4 + random() * 10,
           2 + random() * 3,
           0,
@@ -6375,13 +6515,14 @@ function createCastleFloorTextureSet() {
         colorCtx.restore();
       }
 
-      bumpCtx.fillStyle = `rgb(${184 + random() * 22}, ${184 + random() * 22}, ${184 + random() * 22})`;
-      bumpCtx.fillRect(x, y, tw, th);
-      roughCtx.fillStyle = `rgb(${198 + random() * 26}, ${198 + random() * 26}, ${198 + random() * 26})`;
-      roughCtx.fillRect(x, y, tw, th);
+      bumpCtx.fillStyle = `rgb(${188 + random() * 22}, ${188 + random() * 22}, ${188 + random() * 22})`;
+      bumpCtx.fillRect(x, y, sw, sh);
+      roughCtx.fillStyle = `rgb(${204 + random() * 24}, ${204 + random() * 24}, ${204 + random() * 24})`;
+      roughCtx.fillRect(x, y, sw, sh);
     }
   }
 
+  // Subtle final color noise to break up tiling
   const colorImage = colorCtx.getImageData(0, 0, size, size);
   for (let i = 0; i < colorImage.data.length; i += 4) {
     const noise = (random() - 0.5) * 10;
@@ -6402,6 +6543,158 @@ function createCastleFloorTextureSet() {
     t.repeat.set(4, 4);
   });
   return { color, roughness, bump };
+}
+
+function createWallTorch() {
+  const group = new THREE.Group();
+
+  const ironMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2c2a26,
+    roughness: 0.5,
+    metalness: 0.78,
+  });
+  const woodMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4d3522,
+    roughness: 0.92,
+    metalness: 0.04,
+  });
+  const pitchMaterial = new THREE.MeshStandardMaterial({
+    color: 0x281408,
+    emissive: 0xff5a14,
+    emissiveIntensity: 0.6,
+    roughness: 0.62,
+    metalness: 0.1,
+  });
+
+  // Bracket attached to wall — local +Z faces inward (toward room center)
+  const backplate = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.34, 0.06),
+    ironMaterial
+  );
+  backplate.position.z = -0.02;
+  backplate.castShadow = true;
+  backplate.receiveShadow = true;
+  group.add(backplate);
+
+  // Curved arm out from the wall — approximated with two short segments
+  const arm1 = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.06, 0.18),
+    ironMaterial
+  );
+  arm1.position.set(0, 0.05, 0.07);
+  arm1.rotation.x = -0.35;
+  arm1.castShadow = true;
+  group.add(arm1);
+
+  const arm2 = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.04, 0.16),
+    ironMaterial
+  );
+  arm2.position.set(0, 0.18, 0.18);
+  arm2.rotation.x = 0.55;
+  arm2.castShadow = true;
+  group.add(arm2);
+
+  // Iron cup that holds the torch shaft
+  const cup = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.045, 0.1, 14),
+    ironMaterial
+  );
+  cup.position.set(0, 0.27, 0.24);
+  cup.castShadow = true;
+  group.add(cup);
+
+  // Wooden shaft
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.024, 0.4, 12),
+    woodMaterial
+  );
+  shaft.position.set(0, 0.49, 0.24);
+  shaft.castShadow = true;
+  group.add(shaft);
+
+  // Pitch / cloth top — the burning bit
+  const pitch = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.026, 0.13, 12),
+    pitchMaterial
+  );
+  pitch.position.set(0, 0.74, 0.24);
+  group.add(pitch);
+
+  // Flame layered sprites + halo + point light
+  const flameTexture = createGraceFlameTexture();
+  const flameGroup = new THREE.Group();
+  flameGroup.position.set(0, 0.9, 0.24);
+
+  const wisps = [
+    { sx: 0.22, sy: 0.5, color: 0xff7a1c, opacity: 0.96, phase: 0, speed: 1.5, offsetY: 0.1 },
+    { sx: 0.16, sy: 0.36, color: 0xffaa3c, opacity: 0.88, phase: 1.2, speed: 1.85, offsetY: 0.06 },
+    { sx: 0.12, sy: 0.26, color: 0xffd968, opacity: 0.78, phase: 2.4, speed: 2.1, offsetY: 0.02 },
+  ];
+  const flameSprites = [];
+  for (const w of wisps) {
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: flameTexture,
+        color: w.color,
+        transparent: true,
+        opacity: w.opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    sprite.position.set(0, w.offsetY, 0);
+    sprite.scale.set(w.sx, w.sy, 1);
+    sprite.userData = { ...w };
+    flameSprites.push(sprite);
+    flameGroup.add(sprite);
+  }
+  group.add(flameGroup);
+
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: createRadialGlowTexture('rgba(255, 152, 64, 0.95)'),
+      color: 0xff8a36,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  halo.position.set(0, 0.9, 0.24);
+  halo.scale.set(0.95, 0.95, 1);
+  group.add(halo);
+
+  const flameLight = new THREE.PointLight(0xff8a36, 4.2, 4.6, 1.7);
+  flameLight.position.set(0, 0.9, 0.24);
+  flameLight.castShadow = false;
+  group.add(flameLight);
+
+  return {
+    group,
+    light: flameLight,
+    sprites: flameSprites,
+    halo,
+    update: (t) => {
+      const seed = group.position.x * 1.3 + group.position.z * 0.7;
+      const flicker =
+        Math.sin(t * 7.2 + seed) * 0.32 +
+        Math.sin(t * 13.1 + seed * 0.6) * 0.18 +
+        Math.sin(t * 23.4 + seed * 0.3) * 0.08;
+      flameLight.intensity = 4.0 + flicker * 0.9;
+      halo.material.opacity = 0.5 + flicker * 0.18;
+      const haloPulse = 1 + Math.sin(t * 3.4 + seed) * 0.08;
+      halo.scale.set(0.95 * haloPulse, 0.95 * haloPulse, 1);
+
+      for (const s of flameSprites) {
+        const d = s.userData;
+        const wave = Math.sin(t * d.speed + d.phase + seed);
+        s.scale.x = d.sx * (1 + Math.sin(t * 2.6 + d.phase) * 0.14);
+        s.scale.y = d.sy * (1 + Math.abs(wave) * 0.22);
+        s.material.opacity = d.opacity * (0.78 + 0.22 * Math.sin(t * 3.7 + d.phase));
+      }
+    },
+  };
 }
 
 function createWoodSignTextureSet() {

@@ -1862,42 +1862,45 @@ class SkillsScene extends RegionScene {
   }
 
   addRubble() {
-    const baseMaterial = createRockMaterial();
-    const darkRockMaterial = baseMaterial.clone();
-    darkRockMaterial.map = baseMaterial.map;
-    darkRockMaterial.roughnessMap = baseMaterial.roughnessMap;
-    darkRockMaterial.bumpMap = baseMaterial.bumpMap;
-    darkRockMaterial.color = new THREE.Color(0x4a4942);
-    darkRockMaterial.bumpScale = 0.13;
-    darkRockMaterial.roughness = 0.98;
-
-    const rocks = [
-      [-2.3, -0.92, 1.3, 0.34, 11],
-      [2.2, -0.93, 1.4, 0.30, 23],
-      [-3.1, -0.92, -0.4, 0.42, 47],
-      [3.0, -0.92, -0.5, 0.45, 61],
-      [-1.5, -0.97, -2.0, 0.22, 79],
-      [1.6, -0.96, -2.1, 0.24, 97],
-      [-4.2, -0.92, -2.6, 0.55, 113],
-      [4.1, -0.93, -2.5, 0.58, 131],
-      [-2.6, -0.95, -3.6, 0.36, 149],
-      [2.7, -0.95, -3.7, 0.34, 167],
-      [-0.9, -0.96, 1.9, 0.18, 181],
-      [0.95, -0.97, 1.8, 0.20, 197],
-      [-3.9, -0.94, 0.8, 0.30, 211],
-      [3.8, -0.94, 0.85, 0.32, 229],
-      [-2.0, -0.97, 2.6, 0.16, 241],
-      [2.0, -0.96, 2.5, 0.18, 257],
+    // Battlefield debris scattered around the grace — fallen helms, shields,
+    // and broken weapons left by previous Tarnished.
+    const debris = [
+      { type: 'helm',   x: -2.05, z: 1.0,  rotY: 0.6,  tip: 0.6,  scale: 0.9, seed: 11 },
+      { type: 'helm',   x: 2.15,  z: 0.85, rotY: -0.3, tip: -0.4, scale: 0.95, seed: 23 },
+      { type: 'shield', x: -2.85, z: -0.4, rotY: 0.4,  lean: 0.95, scale: 1.0, seed: 47 },
+      { type: 'shield', x: 2.95,  z: -0.5, rotY: -0.5, lean: 0.7,  scale: 0.95, seed: 61 },
+      { type: 'helm',   x: -3.7,  z: -2.5, rotY: 1.2,  tip: 0.85, scale: 0.85, seed: 79 },
+      { type: 'helm',   x: 3.6,   z: -2.6, rotY: -0.9, tip: -0.7, scale: 0.88, seed: 97 },
+      { type: 'sword',  x: -1.4,  z: 1.85, rotY: 1.15, scale: 1.0, seed: 113 },
+      { type: 'sword',  x: 1.5,   z: 1.95, rotY: -0.55, scale: 0.95, seed: 131 },
+      { type: 'spear',  x: -0.55, z: -1.95, rotY: 0.3,  scale: 1.05, seed: 149 },
+      { type: 'spear',  x: 0.7,   z: 2.4,  rotY: -1.2, scale: 1.0, seed: 167 },
+      { type: 'helm',   x: 0.05,  z: -3.4, rotY: 2.1,  tip: 0.45, scale: 0.85, seed: 181 },
+      { type: 'shield', x: -4.4,  z: -1.6, rotY: 0.85, lean: 1.0, scale: 1.05, seed: 197 },
+      { type: 'sword',  x: 4.4,   z: -1.5, rotY: -0.6, scale: 1.05, seed: 211 },
     ];
 
-    for (const [x, y, z, scale, seed] of rocks) {
-      const rock = new THREE.Mesh(createWeatheredRockGeometry(seed), darkRockMaterial);
-      rock.position.set(x, y + scale * 0.45, z);
-      rock.scale.set(scale, scale * (0.55 + (seed % 7) * 0.04), scale * (0.85 + (seed % 5) * 0.03));
-      rock.rotation.set((seed % 9) * 0.12, seed * 0.31, (seed % 11) * 0.08);
-      rock.castShadow = true;
-      rock.receiveShadow = true;
-      this.group.add(rock);
+    for (const d of debris) {
+      let item;
+      if (d.type === 'helm') item = createKnightHelm(d.seed);
+      else if (d.type === 'shield') item = createBattleShield(d.seed);
+      else if (d.type === 'sword') item = createFallenSword(d.seed);
+      else item = createFallenSpear(d.seed);
+
+      item.position.set(d.x, -0.96, d.z);
+      item.rotation.y = d.rotY ?? 0;
+      if (d.tip !== undefined) {
+        // helms are tipped on their side
+        item.rotation.z = d.tip;
+        item.position.y = -0.86 + (Math.abs(d.tip) > 0.3 ? -0.06 : 0);
+      }
+      if (d.lean !== undefined) {
+        // shields lie on the ground at a slight tilt
+        item.rotation.x = -Math.PI / 2 + (1 - d.lean) * 0.8;
+        item.position.y = -0.95;
+      }
+      item.scale.setScalar(d.scale);
+      this.group.add(item);
     }
 
     // Broken column fragments — short cylindrical chunks lying around
@@ -4782,32 +4785,43 @@ function createSkillsGroundTextureSet() {
 }
 
 function createSwordBladeTextureSet() {
-  const size = 512;
+  // Brushed steel: vertical grain along the blade's length, soft central highlight,
+  // very subtle scattered specks. No repeating cross-pattern.
+  const w = 64;
+  const h = 1024;
   const colorCanvas = document.createElement('canvas');
   const roughCanvas = document.createElement('canvas');
-  colorCanvas.width = roughCanvas.width = 128;
-  colorCanvas.height = roughCanvas.height = size;
+  colorCanvas.width = roughCanvas.width = w;
+  colorCanvas.height = roughCanvas.height = h;
   const colorCtx = colorCanvas.getContext('2d');
   const roughCtx = roughCanvas.getContext('2d');
-  const colorImage = colorCtx.createImageData(128, size);
-  const roughImage = roughCtx.createImageData(128, size);
+  const colorImage = colorCtx.createImageData(w, h);
+  const roughImage = roughCtx.createImageData(w, h);
   const random = seededRandom(80213);
 
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < 128; x++) {
-      const i = (y * 128 + x) * 4;
-      const fromCenter = Math.abs(x - 64) / 64;
-      const grain = Math.sin(y * 0.3 + Math.sin(x * 0.04) * 6) * 0.5 + 0.5;
-      const scratch = Math.pow(Math.abs(Math.sin(y * 0.085 + x * 0.013)), 8);
-      const fleck = random() > 0.985 ? 24 : 0;
-      const tarnish = random() > 0.92 ? 18 : 0;
-      const base = 188 - fromCenter * 28 + grain * 18 - scratch * 32 - tarnish;
-      colorImage.data[i] = Math.max(74, Math.min(232, base + 6 + fleck));
-      colorImage.data[i + 1] = Math.max(74, Math.min(232, base + 2 + fleck));
-      colorImage.data[i + 2] = Math.max(74, Math.min(232, base - 4));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const fromCenter = Math.abs(x - w / 2) / (w / 2);
+      // Soft polished gleam along the centerline
+      const gleam = Math.pow(1 - fromCenter, 2.4) * 22;
+      // Slow drift of the brushed-grain stripes along the blade's length
+      const drift = Math.sin(y * 0.0028) * 1.6;
+      // Long fine vertical streaks (constant along y, varying across x)
+      const streak = (Math.sin((x + drift) * 0.95) * 0.5 + 0.5) * 4;
+      const microStreak = (Math.sin((x + drift) * 3.7) * 0.5 + 0.5) * 2;
+      // Sparse hot specks and occasional dark dust grain
+      const speck = random() > 0.997 ? 26 : 0;
+      const dust = random() > 0.985 ? 6 : random() * 1.6;
+      const base = 184 - fromCenter * 22 + gleam + streak + microStreak - dust + speck;
+      const v = Math.max(132, Math.min(232, base));
+      colorImage.data[i] = v - 2;
+      colorImage.data[i + 1] = v;
+      colorImage.data[i + 2] = v + 4; // slight cool tint on cold steel
       colorImage.data[i + 3] = 255;
 
-      const r = 60 + scratch * 90 + tarnish + random() * 20;
+      // Roughness: smoother near the centerline, a touch rougher at the edges
+      const r = 64 + fromCenter * 22 + streak * 1.2 + dust * 2 + random() * 4;
       roughImage.data[i] = r;
       roughImage.data[i + 1] = r;
       roughImage.data[i + 2] = r;
@@ -4821,9 +4835,9 @@ function createSwordBladeTextureSet() {
   const roughness = new THREE.CanvasTexture(roughCanvas);
   color.colorSpace = THREE.SRGBColorSpace;
   [color, roughness].forEach((t) => {
-    t.wrapS = THREE.RepeatWrapping;
-    t.wrapT = THREE.RepeatWrapping;
-    t.anisotropy = 8;
+    t.wrapS = THREE.ClampToEdgeWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.anisotropy = 16;
   });
   return { color, roughness };
 }
@@ -4834,14 +4848,14 @@ function createSkillSword(skillName, seed) {
 
   const blade = createSwordBladeTextureSet();
   const bladeMaterial = new THREE.MeshStandardMaterial({
-    color: 0xc8d2dc,
+    color: 0xb6becb,
     map: blade.color,
     roughnessMap: blade.roughness,
-    emissive: 0x1a2030,
-    emissiveIntensity: 0.06,
-    roughness: 0.28,
-    metalness: 0.86,
-    envMapIntensity: 0.6,
+    emissive: 0x141a26,
+    emissiveIntensity: 0.05,
+    roughness: 0.22,
+    metalness: 0.95,
+    envMapIntensity: 0.85,
   });
   const guardMaterial = new THREE.MeshStandardMaterial({
     color: 0x9c7c34,
@@ -4986,13 +5000,13 @@ function createSkillSword(skillName, seed) {
   plaque.scale.set(1.7, 0.5, 1);
   group.add(plaque);
 
-  // Bright halo behind the plaque to make it pop against the dark backdrop
+  // Cool halo behind the plaque — silver moonlight against the warm scene
   const halo = new THREE.Sprite(
     new THREE.SpriteMaterial({
-      map: createRadialGlowTexture('rgba(255, 218, 132, 0.95)'),
-      color: 0xffd072,
+      map: createRadialGlowTexture('rgba(196, 218, 248, 0.85)'),
+      color: 0x9fb6d8,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.36,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       depthTest: false,
@@ -5000,7 +5014,7 @@ function createSkillSword(skillName, seed) {
   );
   halo.renderOrder = 39;
   halo.position.set(0, plaqueY, -0.01);
-  halo.scale.set(2.3, 1.15, 1);
+  halo.scale.set(1.7, 0.85, 1);
   group.add(halo);
 
   // Small dust mound at the base — circular dark ring
@@ -5023,8 +5037,8 @@ function createSkillSword(skillName, seed) {
       const shimmer = Math.sin(t * 1.4 + phase) * 0.04 + 0.98;
       bladeMaterial.emissiveIntensity = 0.05 + 0.05 * Math.sin(t * 1.7 + phase);
       plaque.material.opacity = 0.94 + 0.06 * Math.sin(t * 1.6 + phase);
-      halo.material.opacity = 0.6 + 0.18 * Math.sin(t * 1.6 + phase * 1.2);
-      halo.scale.set(2.3 * shimmer, 1.15 * shimmer, 1);
+      halo.material.opacity = 0.32 + 0.1 * Math.sin(t * 1.6 + phase * 1.2);
+      halo.scale.set(1.7 * shimmer, 0.85 * shimmer, 1);
     },
   };
 
@@ -5032,6 +5046,8 @@ function createSkillSword(skillName, seed) {
 }
 
 function createSwordPlaqueTexture(text) {
+  // Cool moonlit silver text — contrasts against the warm flame light, with a
+  // tighter glow so it reads clearly without bloom.
   const w = 1280;
   const h = 320;
   const canvas = document.createElement('canvas');
@@ -5044,31 +5060,367 @@ function createSwordPlaqueTexture(text) {
   ctx.textBaseline = 'middle';
   ctx.font = '700 132px "Cormorant Garamond", "Times New Roman", Georgia, serif';
 
-  // Wide warm halo
-  ctx.shadowColor = 'rgba(255, 188, 80, 1)';
-  ctx.shadowBlur = 86;
-  ctx.fillStyle = 'rgba(255, 220, 130, 1)';
-  ctx.fillText(text, w / 2, h / 2);
+  // Outer cool halo
+  ctx.shadowColor = 'rgba(168, 198, 240, 0.85)';
+  ctx.shadowBlur = 32;
+  ctx.fillStyle = 'rgba(212, 226, 248, 0.95)';
   ctx.fillText(text, w / 2, h / 2);
 
-  // Tight golden glow
-  ctx.shadowBlur = 32;
-  ctx.fillStyle = '#ffe69a';
+  // Tight cool gleam
+  ctx.shadowColor = 'rgba(192, 214, 248, 0.95)';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = '#e8eefb';
   ctx.fillText(text, w / 2, h / 2);
 
   // Crisp bright core
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = '#fffbe6';
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fbfdff';
   ctx.fillText(text, w / 2, h / 2);
 
+  // Subtle dark outline so the letters hold their shape against bright halos
   ctx.shadowBlur = 0;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(text, w / 2, h / 2);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(20, 28, 48, 0.65)';
+  ctx.strokeText(text, w / 2, h / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 16;
   return texture;
+}
+
+function createBattlefieldSteel({ tint = 0x6c6f76, rough = 0.55, metal = 0.82 } = {}) {
+  return new THREE.MeshStandardMaterial({
+    color: tint,
+    roughness: rough,
+    metalness: metal,
+    emissive: 0x10131a,
+    emissiveIntensity: 0.05,
+  });
+}
+
+function createKnightHelm(seed) {
+  const random = seededRandom(seed * 23 + 11);
+  const group = new THREE.Group();
+
+  const steel = createBattlefieldSteel({ tint: 0x5d6068 });
+  const darkSteel = createBattlefieldSteel({ tint: 0x3d4047, rough: 0.7, metal: 0.7 });
+  const trim = createBattlefieldSteel({ tint: 0x8a6a2e, rough: 0.4, metal: 0.7 });
+  trim.emissive = new THREE.Color(0x261805);
+  trim.emissiveIntensity = 0.18;
+
+  // Domed crown
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+    steel
+  );
+  dome.position.y = 0.16;
+  dome.castShadow = true;
+  dome.receiveShadow = true;
+  group.add(dome);
+
+  // Lower face guard — slightly tapered cylinder
+  const face = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.2, 0.185, 0.18, 28, 1, true),
+    steel
+  );
+  face.position.y = 0.07;
+  face.castShadow = true;
+  face.receiveShadow = true;
+  group.add(face);
+
+  // Crown ridge (a thin raised rib running front-to-back)
+  const ridge = new THREE.Mesh(
+    new THREE.BoxGeometry(0.026, 0.04, 0.4),
+    darkSteel
+  );
+  ridge.position.y = 0.34;
+  group.add(ridge);
+
+  // Brim ring at the join between dome and face
+  const brim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.2, 0.018, 10, 32),
+    trim
+  );
+  brim.rotation.x = Math.PI / 2;
+  brim.position.y = 0.16;
+  group.add(brim);
+
+  // Eye slit — a thin recessed dark band wrapping around the front
+  const slit = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 0.022, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x05060a, roughness: 0.95, metalness: 0.1 })
+  );
+  slit.position.set(0, 0.115, 0.18);
+  group.add(slit);
+
+  // Reinforcing bar between the eyes
+  const noseBar = new THREE.Mesh(
+    new THREE.BoxGeometry(0.018, 0.07, 0.02),
+    darkSteel
+  );
+  noseBar.position.set(0, 0.115, 0.2);
+  group.add(noseBar);
+
+  // Riveted dots along the brim (just small spheres)
+  const rivetMat = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.5, metalness: 0.85 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), rivetMat);
+    rivet.position.set(Math.cos(a) * 0.198, 0.16, Math.sin(a) * 0.198);
+    group.add(rivet);
+  }
+
+  // Neck guard — a small flared collar at the bottom
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.205, 0.16, 0.04, 28, 1, true),
+    steel
+  );
+  collar.position.y = -0.005;
+  group.add(collar);
+
+  group.rotation.y = random() * Math.PI * 2;
+  return group;
+}
+
+function createBattleShield(seed) {
+  const random = seededRandom(seed * 17 + 5);
+  const group = new THREE.Group();
+
+  // Heater shield silhouette
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.36, 0.42);
+  shape.lineTo(0.36, 0.42);
+  shape.bezierCurveTo(0.36, 0.05, 0.32, -0.34, 0, -0.54);
+  shape.bezierCurveTo(-0.32, -0.34, -0.36, 0.05, -0.36, 0.42);
+
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.06,
+    bevelEnabled: true,
+    bevelThickness: 0.014,
+    bevelSize: 0.014,
+    bevelSegments: 2,
+    curveSegments: 12,
+  });
+  geom.center();
+
+  const facingMat = new THREE.MeshStandardMaterial({
+    color: 0x4b3522,
+    roughness: 0.86,
+    metalness: 0.06,
+  });
+  const shield = new THREE.Mesh(geom, facingMat);
+  shield.castShadow = true;
+  shield.receiveShadow = true;
+  group.add(shield);
+
+  // Iron rim around the perimeter — built from segments hugging the edge
+  const rimMat = createBattlefieldSteel({ tint: 0x3a3c40, rough: 0.5, metal: 0.78 });
+  const rimSegments = 18;
+  for (let i = 0; i < rimSegments; i++) {
+    const t = i / rimSegments;
+    const angle = t * Math.PI * 2;
+    // Approximate the heater outline with an ellipse — close enough at this scale
+    const rx = 0.4;
+    const ry = 0.5;
+    const x = Math.cos(angle) * rx;
+    const y = Math.sin(angle) * ry - 0.06;
+    const next = ((i + 1) / rimSegments) * Math.PI * 2;
+    const nx = Math.cos(next) * rx;
+    const ny = Math.sin(next) * ry - 0.06;
+    const seg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.014, Math.hypot(nx - x, ny - y) * 1.04, 6),
+      rimMat
+    );
+    seg.position.set((x + nx) / 2, (y + ny) / 2, 0.04);
+    seg.rotation.z = Math.atan2(ny - y, nx - x) - Math.PI / 2;
+    group.add(seg);
+  }
+
+  // Central iron boss
+  const bossMat = createBattlefieldSteel({ tint: 0x35373c, rough: 0.42, metal: 0.85 });
+  const boss = new THREE.Mesh(
+    new THREE.SphereGeometry(0.075, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2.2),
+    bossMat
+  );
+  boss.position.z = 0.05;
+  boss.position.y = -0.06;
+  group.add(boss);
+
+  // Cross detail in tarnished bronze — two thin bars
+  const detailMat = new THREE.MeshStandardMaterial({
+    color: 0x7d5e2a,
+    emissive: 0x2a1a06,
+    emissiveIntensity: 0.18,
+    roughness: 0.55,
+    metalness: 0.6,
+  });
+  const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.7, 0.012), detailMat);
+  vBar.position.set(0, -0.06, 0.045);
+  group.add(vBar);
+  const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.012), detailMat);
+  hBar.position.set(0, 0.05, 0.045);
+  group.add(hBar);
+
+  // Cracks/wear via a couple dark scuffs
+  const scuffMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.42,
+  });
+  for (let i = 0; i < 3; i++) {
+    const scuff = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.04), scuffMat);
+    scuff.position.set(
+      (random() - 0.5) * 0.5,
+      (random() - 0.5) * 0.7,
+      0.05
+    );
+    scuff.rotation.z = (random() - 0.5) * 1.4;
+    group.add(scuff);
+  }
+
+  return group;
+}
+
+function createFallenSword(seed) {
+  const random = seededRandom(seed * 41 + 3);
+  const group = new THREE.Group();
+
+  const bladeMat = createBattlefieldSteel({ tint: 0x80868f, rough: 0.42, metal: 0.88 });
+  const guardMat = new THREE.MeshStandardMaterial({
+    color: 0x6c5320,
+    emissive: 0x2a1c06,
+    emissiveIntensity: 0.16,
+    roughness: 0.45,
+    metalness: 0.7,
+  });
+  const gripMat = new THREE.MeshStandardMaterial({
+    color: 0x2a1810,
+    roughness: 0.86,
+    metalness: 0.05,
+  });
+  const pommelMat = guardMat.clone();
+
+  // Blade — broken near the tip on some swords
+  const broken = random() > 0.55;
+  const bladeLen = broken ? 0.55 + random() * 0.2 : 0.78 + random() * 0.16;
+
+  const bladeShape = new THREE.Shape();
+  bladeShape.moveTo(0, -0.04);
+  bladeShape.lineTo(0, 0.04);
+  bladeShape.lineTo(bladeLen - 0.04, 0.045);
+  if (broken) {
+    // jagged break
+    bladeShape.lineTo(bladeLen, 0.025);
+    bladeShape.lineTo(bladeLen - 0.025, 0.005);
+    bladeShape.lineTo(bladeLen + 0.01, -0.012);
+    bladeShape.lineTo(bladeLen - 0.02, -0.03);
+  } else {
+    bladeShape.lineTo(bladeLen, 0);
+  }
+  bladeShape.lineTo(bladeLen - 0.04, -0.045);
+  bladeShape.lineTo(0, -0.04);
+
+  const bladeGeom = new THREE.ExtrudeGeometry(bladeShape, {
+    depth: 0.018,
+    bevelEnabled: true,
+    bevelThickness: 0.005,
+    bevelSize: 0.005,
+    bevelSegments: 1,
+  });
+  bladeGeom.translate(0, 0, -0.009);
+  const blade = new THREE.Mesh(bladeGeom, bladeMat);
+  blade.castShadow = true;
+  blade.receiveShadow = true;
+  group.add(blade);
+
+  // Crossguard
+  const guard = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.16, 0.036),
+    guardMat
+  );
+  guard.position.set(-0.03, 0, 0);
+  group.add(guard);
+
+  // Grip
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.02, 0.13, 14),
+    gripMat
+  );
+  grip.rotation.z = Math.PI / 2;
+  grip.position.set(-0.115, 0, 0);
+  group.add(grip);
+
+  // Pommel
+  const pommel = new THREE.Mesh(
+    new THREE.SphereGeometry(0.028, 14, 10),
+    pommelMat
+  );
+  pommel.position.set(-0.19, 0, 0);
+  group.add(pommel);
+
+  // Lay the sword flat on the ground (rotate so its length runs along Z)
+  group.rotation.x = -Math.PI / 2;
+  group.rotation.y = 0;
+  group.rotation.z = (random() - 0.5) * 0.6;
+
+  return group;
+}
+
+function createFallenSpear(seed) {
+  const random = seededRandom(seed * 59 + 7);
+  const group = new THREE.Group();
+
+  const woodMat = new THREE.MeshStandardMaterial({
+    color: 0x4b2f1a,
+    roughness: 0.92,
+    metalness: 0.04,
+  });
+  const headMat = createBattlefieldSteel({ tint: 0x70757d, rough: 0.5, metal: 0.82 });
+  const bandMat = createBattlefieldSteel({ tint: 0x49423a, rough: 0.6, metal: 0.65 });
+
+  const shaftLen = 0.95 + random() * 0.25;
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.016, 0.018, shaftLen, 10),
+    woodMat
+  );
+  shaft.castShadow = true;
+  shaft.receiveShadow = true;
+  group.add(shaft);
+
+  // Spearhead at the top
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(0.03, 0.16, 12),
+    headMat
+  );
+  head.position.y = shaftLen / 2 + 0.08;
+  head.castShadow = true;
+  group.add(head);
+
+  // Connecting socket
+  const socket = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.022, 0.05, 12),
+    bandMat
+  );
+  socket.position.y = shaftLen / 2 + 0.012;
+  group.add(socket);
+
+  // Decorative rope/leather binding mid-shaft
+  for (let i = 0; i < 3; i++) {
+    const wrap = new THREE.Mesh(
+      new THREE.TorusGeometry(0.019, 0.004, 6, 14),
+      new THREE.MeshStandardMaterial({ color: 0x2d1b0a, roughness: 0.95, metalness: 0.04 })
+    );
+    wrap.rotation.x = Math.PI / 2;
+    wrap.position.y = shaftLen * 0.18 - i * 0.025;
+    group.add(wrap);
+  }
+
+  // Lay flat
+  group.rotation.x = Math.PI / 2;
+  group.rotation.z = (random() - 0.5) * 0.4;
+
+  return group;
 }
 
 function createFlameArrow(yaw, lean) {

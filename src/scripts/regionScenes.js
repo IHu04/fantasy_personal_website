@@ -1809,7 +1809,6 @@ class SkillsScene extends RegionScene {
     this.addSwordRow();
     this.addFlameArrows();
     this.addParticles();
-    this.addContent();
   }
 
   addLighting() {
@@ -2084,7 +2083,7 @@ class SkillsScene extends RegionScene {
 
     for (const cfg of configs) {
       const arrow = createFlameArrow(cfg.yaw, cfg.lean);
-      arrow.group.position.set(cfg.x, -0.95, cfg.z);
+      arrow.group.position.set(cfg.x, -1.0, cfg.z);
       this.arrows.push(arrow);
       this.group.add(arrow.group);
     }
@@ -2120,14 +2119,6 @@ class SkillsScene extends RegionScene {
       this.motes.add(mote);
     }
     this.group.add(this.motes);
-  }
-
-  addContent() {
-    const tablet = createRegionTablet(this.region);
-    tablet.position.set(3.7, 0.42, -1.3);
-    tablet.rotation.set(-0.05, -0.42, 0.02);
-    tablet.scale.setScalar(0.7);
-    this.group.add(tablet);
   }
 
   getCameraConfig() {
@@ -4978,35 +4969,38 @@ function createSkillSword(skillName, seed) {
   pommel.castShadow = true;
   group.add(pommel);
 
-  // Plaque label hovering above the sword
+  // Plaque label hovering above the sword — large and bright so it reads from far away
   const plaqueTexture = createSwordPlaqueTexture(skillName);
   const plaque = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: plaqueTexture,
       transparent: true,
-      opacity: 0.94,
+      opacity: 1,
       depthWrite: false,
-      depthTest: true,
+      depthTest: false,
     })
   );
-  const plaqueY = pommel.position.y + 0.34;
+  plaque.renderOrder = 40;
+  const plaqueY = pommel.position.y + 0.46;
   plaque.position.set(0, plaqueY, 0);
-  plaque.scale.set(1.05, 0.32, 1);
+  plaque.scale.set(1.7, 0.5, 1);
   group.add(plaque);
 
-  // Faint glow halo behind the plaque
+  // Bright halo behind the plaque to make it pop against the dark backdrop
   const halo = new THREE.Sprite(
     new THREE.SpriteMaterial({
-      map: createRadialGlowTexture('rgba(255, 198, 96, 0.85)'),
-      color: 0xffb968,
+      map: createRadialGlowTexture('rgba(255, 218, 132, 0.95)'),
+      color: 0xffd072,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.7,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      depthTest: false,
     })
   );
+  halo.renderOrder = 39;
   halo.position.set(0, plaqueY, -0.01);
-  halo.scale.set(1.4, 0.72, 1);
+  halo.scale.set(2.3, 1.15, 1);
   group.add(halo);
 
   // Small dust mound at the base — circular dark ring
@@ -5026,11 +5020,11 @@ function createSkillSword(skillName, seed) {
   const phase = random() * Math.PI * 2;
   group.userData = {
     update: (t) => {
-      const shimmer = Math.sin(t * 1.4 + phase) * 0.04 + 0.96;
-      bladeMaterial.emissiveIntensity = 0.04 + 0.04 * Math.sin(t * 1.7 + phase);
-      plaque.material.opacity = 0.86 + 0.1 * Math.sin(t * 1.6 + phase);
-      halo.material.opacity = 0.26 + 0.12 * Math.sin(t * 1.6 + phase * 1.2);
-      halo.scale.set(1.4 * shimmer, 0.72 * shimmer, 1);
+      const shimmer = Math.sin(t * 1.4 + phase) * 0.04 + 0.98;
+      bladeMaterial.emissiveIntensity = 0.05 + 0.05 * Math.sin(t * 1.7 + phase);
+      plaque.material.opacity = 0.94 + 0.06 * Math.sin(t * 1.6 + phase);
+      halo.material.opacity = 0.6 + 0.18 * Math.sin(t * 1.6 + phase * 1.2);
+      halo.scale.set(2.3 * shimmer, 1.15 * shimmer, 1);
     },
   };
 
@@ -5038,8 +5032,8 @@ function createSkillSword(skillName, seed) {
 }
 
 function createSwordPlaqueTexture(text) {
-  const w = 1024;
-  const h = 256;
+  const w = 1280;
+  const h = 320;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -5048,24 +5042,32 @@ function createSwordPlaqueTexture(text) {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '600 92px "Cormorant Garamond", "Times New Roman", Georgia, serif';
+  ctx.font = '700 132px "Cormorant Garamond", "Times New Roman", Georgia, serif';
 
-  ctx.shadowColor = 'rgba(255, 196, 92, 0.95)';
-  ctx.shadowBlur = 48;
-  ctx.fillStyle = 'rgba(255, 220, 130, 0.95)';
+  // Wide warm halo
+  ctx.shadowColor = 'rgba(255, 188, 80, 1)';
+  ctx.shadowBlur = 86;
+  ctx.fillStyle = 'rgba(255, 220, 130, 1)';
+  ctx.fillText(text, w / 2, h / 2);
   ctx.fillText(text, w / 2, h / 2);
 
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = '#fff1c8';
+  // Tight golden glow
+  ctx.shadowBlur = 32;
+  ctx.fillStyle = '#ffe69a';
+  ctx.fillText(text, w / 2, h / 2);
+
+  // Crisp bright core
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = '#fffbe6';
   ctx.fillText(text, w / 2, h / 2);
 
   ctx.shadowBlur = 0;
-  ctx.fillStyle = '#fff8e6';
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(text, w / 2, h / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   return texture;
 }
 
@@ -5082,7 +5084,7 @@ function createFlameArrow(yaw, lean) {
   const headMaterial = new THREE.MeshStandardMaterial({
     color: 0x6a4928,
     emissive: 0xff7a22,
-    emissiveIntensity: 0.85,
+    emissiveIntensity: 0.95,
     roughness: 0.36,
     metalness: 0.65,
   });
@@ -5093,65 +5095,73 @@ function createFlameArrow(yaw, lean) {
     metalness: 0,
   });
 
-  // The arrow is built as if it were stuck point-down: shaft from y=0 upward,
-  // arrowhead+flame near the top. We then rotate the whole group so it leans.
-  const shaftHeight = 1.05;
+  // Built tip-DOWN: arrowhead point at local origin (y=0) plunging into the ground,
+  // shaft rising up, fletching/nock at top. The whole group is rotated to lean.
+  const headLength = 0.13;
+  const shaftHeight = 1.0;
+
+  // Arrowhead — cone, tip down, base up. ConeGeometry's tip is at +y by default,
+  // so rotate 180° around X to point downward and offset so the tip sits at y=0.
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(0.038, headLength, 12),
+    headMaterial
+  );
+  head.rotation.x = Math.PI;
+  head.position.y = headLength / 2;
+  head.castShadow = true;
+  group.add(head);
+
+  // Heated rim where the head meets the shaft (just above the buried portion)
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.022, 0.006, 8, 16),
+    headMaterial
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = headLength + 0.005;
+  group.add(rim);
+
+  // Shaft above the head
   const shaft = new THREE.Mesh(
     new THREE.CylinderGeometry(0.012, 0.013, shaftHeight, 10),
     woodMaterial
   );
-  shaft.position.y = shaftHeight / 2;
+  shaft.position.y = headLength + shaftHeight / 2;
   shaft.castShadow = true;
   group.add(shaft);
 
-  // Arrowhead (triangular head a bit below the flame tip)
-  const head = new THREE.Mesh(
-    new THREE.ConeGeometry(0.034, 0.11, 10),
-    headMaterial
-  );
-  head.position.y = shaftHeight + 0.06;
-  head.castShadow = true;
-  group.add(head);
-
-  // A small heated rim where the head meets the shaft
-  const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(0.018, 0.005, 8, 14),
-    headMaterial
-  );
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = shaftHeight + 0.005;
-  group.add(rim);
-
-  // Fletching — three angled feathers at the bottom (which is the back of the arrow)
+  // Fletching at the top — back of the arrow now sits high in the air
+  const fletchY = headLength + shaftHeight - 0.08;
   for (let i = 0; i < 3; i++) {
     const angle = (i / 3) * Math.PI * 2;
     const fletch = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.07, 0.16),
+      new THREE.PlaneGeometry(0.075, 0.18),
       fletchMaterial
     );
-    fletch.position.set(Math.cos(angle) * 0.02, 0.12, Math.sin(angle) * 0.02);
+    fletch.position.set(Math.cos(angle) * 0.02, fletchY, Math.sin(angle) * 0.02);
     fletch.rotation.y = angle;
     fletch.rotation.z = 0.18;
     group.add(fletch);
   }
 
-  // Nock at the very bottom
+  // Nock at the very top
   const nock = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.014, 0.014, 0.022, 8),
+    new THREE.CylinderGeometry(0.015, 0.015, 0.024, 8),
     woodMaterial
   );
-  nock.position.y = 0.011;
+  nock.position.y = headLength + shaftHeight + 0.005;
   group.add(nock);
 
-  // Flame at the tip — additive sprites
+  // Flame burning at the buried tip — wraps the embedded arrowhead and licks up
   const flameTexture = createGraceFlameTexture();
   const flameGroup = new THREE.Group();
-  flameGroup.position.set(0, shaftHeight + 0.12, 0);
+  // Flame anchored just above the rim so it appears to burn the arrowhead
+  flameGroup.position.set(0, headLength + 0.02, 0);
 
   const wisps = [
-    { sx: 0.21, sy: 0.5, color: 0xff8a26, opacity: 0.96, phase: 0, speed: 1.5, offsetY: 0.1 },
-    { sx: 0.16, sy: 0.38, color: 0xffd054, opacity: 0.82, phase: 1.6, speed: 1.85, offsetY: 0.06 },
-    { sx: 0.11, sy: 0.26, color: 0xfff1b0, opacity: 0.66, phase: 3.1, speed: 2.2, offsetY: 0.0 },
+    { sx: 0.32, sy: 0.62, color: 0xff7a1c, opacity: 1, phase: 0, speed: 1.4, offsetY: 0.18 },
+    { sx: 0.24, sy: 0.46, color: 0xffaa3c, opacity: 0.92, phase: 1.2, speed: 1.7, offsetY: 0.12 },
+    { sx: 0.18, sy: 0.34, color: 0xffd968, opacity: 0.82, phase: 2.4, speed: 1.95, offsetY: 0.07 },
+    { sx: 0.12, sy: 0.22, color: 0xfff2bc, opacity: 0.7, phase: 3.6, speed: 2.3, offsetY: 0.02 },
   ];
   const flameSprites = [];
   for (const w of wisps) {
@@ -5173,34 +5183,49 @@ function createFlameArrow(yaw, lean) {
   }
   group.add(flameGroup);
 
-  // Outer warm halo so the flame casts a visible glow even where light doesn't reach
+  // Outer warm halo
   const haloSprite = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: createRadialGlowTexture('rgba(255, 152, 64, 0.95)'),
       color: 0xff8a36,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.7,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
   );
-  haloSprite.position.copy(flameGroup.position);
-  haloSprite.scale.set(0.95, 0.95, 1);
+  haloSprite.position.set(0, headLength + 0.16, 0);
+  haloSprite.scale.set(1.25, 1.25, 1);
   group.add(haloSprite);
 
-  // Point light at the flame
-  const flameLight = new THREE.PointLight(0xff8a36, 4.6, 5.4, 1.7);
-  flameLight.position.set(0, shaftHeight + 0.18, 0);
+  // Ground glow pool — a flat disc of warm light on the dirt right at the impact point
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(0.45, 32),
+    new THREE.MeshBasicMaterial({
+      map: createLightPoolTexture(),
+      color: 0xff8a36,
+      transparent: true,
+      opacity: 0.62,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.005;
+  group.add(pool);
+
+  // Point light at the flame — brighter since this is now a primary scene light
+  const flameLight = new THREE.PointLight(0xff8a36, 5.6, 5.8, 1.7);
+  flameLight.position.set(0, headLength + 0.2, 0);
   flameLight.castShadow = false;
   group.add(flameLight);
 
-  // Apply orientation: yaw around Y, lean around X (forward)
+  // Apply orientation: yaw around Y, lean tilts the shaft away from vertical.
+  // The pivot is the local origin = the buried arrowhead tip, so the tip stays
+  // planted while the rest of the arrow leans.
   group.rotation.order = 'YXZ';
   group.rotation.y = yaw;
   group.rotation.x = -lean;
-
-  // Bury the tip (which sits at y=0 in local space) slightly into the ground
-  group.position.y = -0.05;
 
   const flickerSeed = yaw * 11.3 + lean * 7.7;
 

@@ -1782,9 +1782,6 @@ const skillSwordPlacements = [
   // Side flanks turned toward the camera
   { name: 'Prototyping',        x: -4.25, z:  0.45, rotY:  0.62, rotZ: 0.035 },
   { name: 'Animation',          x:  4.25, z:  0.45, rotY: -0.62, rotZ: -0.035 },
-  // Outpost swords further back to extend the field of fallen blades
-  { name: 'Storytelling',       x: -3.30, z: -5.05, rotY:  0.18, rotZ: 0.04 },
-  { name: 'Tooling',            x:  3.30, z: -5.05, rotY: -0.18, rotZ: -0.04 },
 ];
 
 class SkillsScene extends RegionScene {
@@ -2129,6 +2126,7 @@ class SkillsScene extends RegionScene {
       orbitSpeed: 0.12,
       bobAmount: 0.05,
       bobSpeed: 0.42,
+      mouseInfluence: 0.85,
     };
   }
 

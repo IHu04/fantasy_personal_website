@@ -1773,12 +1773,18 @@ class ProjectMarker extends THREE.Group {
   }
 }
 
-const skillSwordEntries = [
-  { name: 'Frontend Craft' },
-  { name: 'Interaction Design' },
-  { name: 'Data Modeling' },
-  { name: 'Visual Systems' },
-  { name: 'Automation' },
+const skillSwordPlacements = [
+  // Back row planted behind the grace
+  { name: 'Frontend Craft',     x: -2.85, z: -2.85, rotY: -0.05, rotZ: 0.028 },
+  { name: 'Interaction Design', x: -1.40, z: -2.65, rotY: -0.02, rotZ: -0.02 },
+  { name: 'Visual Systems',     x:  1.40, z: -2.65, rotY:  0.02, rotZ: 0.018 },
+  { name: 'Automation',         x:  2.85, z: -2.85, rotY:  0.05, rotZ: -0.028 },
+  // Side flanks turned toward the camera
+  { name: 'Prototyping',        x: -4.25, z:  0.45, rotY:  0.62, rotZ: 0.035 },
+  { name: 'Animation',          x:  4.25, z:  0.45, rotY: -0.62, rotZ: -0.035 },
+  // Outpost swords further back to extend the field of fallen blades
+  { name: 'Storytelling',       x: -3.30, z: -5.05, rotY:  0.18, rotZ: 0.04 },
+  { name: 'Tooling',            x:  3.30, z: -5.05, rotY: -0.18, rotZ: -0.04 },
 ];
 
 class SkillsScene extends RegionScene {
@@ -2049,21 +2055,12 @@ class SkillsScene extends RegionScene {
   }
 
   addSwordRow() {
-    const count = skillSwordEntries.length;
-    const span = 5.4;
-    const baseZ = -2.8;
-
-    for (let i = 0; i < count; i++) {
-      const t = count > 1 ? i / (count - 1) : 0.5;
-      const x = -span / 2 + span * t;
-      const distFromCenter = Math.abs(x);
-      // Slight arc so outer swords sit a touch back
-      const z = baseZ - distFromCenter * 0.22;
-
-      const sword = createSkillSword(skillSwordEntries[i].name, i * 13 + 7);
-      sword.position.set(x, -1.02, z);
-      sword.rotation.y = (i - (count - 1) / 2) * -0.04;
-      sword.rotation.z = Math.sin(i * 1.7) * 0.03;
+    for (let i = 0; i < skillSwordPlacements.length; i++) {
+      const p = skillSwordPlacements[i];
+      const sword = createSkillSword(p.name, i * 13 + 7);
+      sword.position.set(p.x, -1.02, p.z);
+      sword.rotation.y = p.rotY ?? 0;
+      sword.rotation.z = p.rotZ ?? 0;
       sword.castShadow = true;
 
       this.swords.push(sword);

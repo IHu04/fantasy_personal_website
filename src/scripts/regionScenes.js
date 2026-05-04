@@ -2169,16 +2169,444 @@ class SkillsScene extends RegionScene {
   }
 }
 
-class ContactScene extends GraceRegionScene {
+const contactDetails = {
+  title: 'Send Word',
+  metadata: 'Roundtable Hold',
+  intro: 'Messages, collaborations, and quests welcome. The fastest way to reach me is below — every link opens in a new window.',
+  links: [
+    { label: 'Email',    value: 'isaachu2004@gmail.com',     href: 'mailto:isaachu2004@gmail.com' },
+    { label: 'GitHub',   value: 'github.com/IHu04',           href: 'https://github.com/IHu04' },
+    { label: 'LinkedIn', value: 'linkedin.com/in/isaac-hu',   href: 'https://www.linkedin.com/in/isaac-hu' },
+  ],
+};
+
+class ContactScene extends RegionScene {
+  group = new THREE.Group();
+
+  grace = null;
+  graceLight = null;
+  graceHalo = null;
+  graceFlame = null;
+  gracePool = null;
+
+  signGroup = null;
+  signClickable = null;
+  signHint = null;
+  signOverlay = null;
+  isSignFocused = false;
+  signFocusProgress = 0;
+  hasOpenedSignOverlay = false;
+
+  motes = null;
+
+  init() {
+    this.scene.background = createCastleEveningSkyTexture();
+    this.scene.fog = new THREE.FogExp2(0x0e1726, 0.04);
+    this.scene.add(this.group);
+
+    this.addLighting();
+    this.addFloor();
+    this.addCurvedWall();
+    this.addSiteOfGrace();
+    this.addWoodSign();
+    this.addParticles();
+
+    this.signOverlay = createContactReaderOverlay(contactDetails, () => this.#closeSignOverlay());
+  }
+
+  addLighting() {
+    // Cool blue ambient — late twilight
+    const ambient = new THREE.AmbientLight(0x1c2740, 0.55);
+    this.scene.add(ambient);
+
+    const hemi = new THREE.HemisphereLight(0x5e80ad, 0x10131c, 0.95);
+    this.scene.add(hemi);
+
+    // Moonlight from above-left
+    const moon = new THREE.DirectionalLight(0xa8c0e8, 1.45);
+    moon.position.set(-4.5, 9, 3.2);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.camera.left = -10;
+    moon.shadow.camera.right = 10;
+    moon.shadow.camera.top = 10;
+    moon.shadow.camera.bottom = -10;
+    moon.shadow.camera.near = 1;
+    moon.shadow.camera.far = 30;
+    moon.shadow.bias = -0.0002;
+    moon.shadow.normalBias = 0.02;
+    this.scene.add(moon);
+
+    // A soft cool fill from behind to silhouette the grace + sign
+    const rim = new THREE.DirectionalLight(0x4a78a8, 0.42);
+    rim.position.set(2.5, 5, -6);
+    this.scene.add(rim);
+  }
+
+  addFloor() {
+    const geometry = new THREE.PlaneGeometry(28, 28, 1, 1);
+    geometry.rotateX(-Math.PI / 2);
+    const textures = createCastleFloorTextureSet();
+    const floor = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        color: 0x6a7280,
+        map: textures.color,
+        roughnessMap: textures.roughness,
+        bumpMap: textures.bump,
+        bumpScale: 0.06,
+        roughness: 0.95,
+        metalness: 0.04,
+      })
+    );
+    floor.position.y = -0.95;
+    floor.receiveShadow = true;
+    this.group.add(floor);
+  }
+
+  addCurvedWall() {
+    const wallRadius = 7.2;
+    const wallHeight = 4.6;
+    const stone = createCastleWallTextureSet();
+
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x76808d,
+      map: stone.color,
+      roughnessMap: stone.roughness,
+      bumpMap: stone.bump,
+      bumpScale: 0.18,
+      roughness: 0.95,
+      metalness: 0.05,
+      side: THREE.DoubleSide,
+    });
+
+    // Main curved wall — partial cylinder, opening faces +Z (camera side)
+    const wallGeom = new THREE.CylinderGeometry(
+      wallRadius, wallRadius, wallHeight,
+      96, 1, true,
+      Math.PI / 4, 3 * Math.PI / 2
+    );
+    const wall = new THREE.Mesh(wallGeom, wallMaterial);
+    wall.position.y = -0.95 + wallHeight / 2;
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    this.group.add(wall);
+
+    // Heavier base/plinth ring
+    const trim = createCastleTrimTextureSet();
+    const trimMaterial = new THREE.MeshStandardMaterial({
+      color: 0x5d646e,
+      map: trim.color,
+      roughnessMap: trim.roughness,
+      bumpMap: trim.bump,
+      bumpScale: 0.1,
+      roughness: 0.96,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    });
+
+    const plinthGeom = new THREE.CylinderGeometry(
+      wallRadius + 0.16, wallRadius + 0.18, 0.62,
+      96, 1, true,
+      Math.PI / 4, 3 * Math.PI / 2
+    );
+    const plinth = new THREE.Mesh(plinthGeom, trimMaterial);
+    plinth.position.y = -0.95 + 0.31;
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    this.group.add(plinth);
+
+    // Cornice / chair-rail band part way up
+    const railGeom = new THREE.CylinderGeometry(
+      wallRadius + 0.12, wallRadius + 0.12, 0.18,
+      96, 1, true,
+      Math.PI / 4, 3 * Math.PI / 2
+    );
+    const rail = new THREE.Mesh(railGeom, trimMaterial);
+    rail.position.y = -0.95 + 1.4;
+    rail.castShadow = true;
+    rail.receiveShadow = true;
+    this.group.add(rail);
+
+    // Crenellated / capped cornice at the top
+    const capGeom = new THREE.CylinderGeometry(
+      wallRadius + 0.22, wallRadius + 0.16, 0.4,
+      96, 1, true,
+      Math.PI / 4, 3 * Math.PI / 2
+    );
+    const cap = new THREE.Mesh(capGeom, trimMaterial);
+    cap.position.y = -0.95 + wallHeight - 0.05;
+    cap.castShadow = true;
+    cap.receiveShadow = true;
+    this.group.add(cap);
+  }
+
+  addSiteOfGrace() {
+    const cx = 0;
+    const cy = -0.15;
+    const cz = 0;
+
+    this.grace = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff2a6, transparent: true, opacity: 1 })
+    );
+    this.grace.position.set(cx, cy, cz);
+    this.group.add(this.grace);
+
+    this.graceLight = new THREE.PointLight(0xf0d060, 3.6, 9);
+    this.graceLight.position.set(cx, cy + 0.2, cz);
+    this.group.add(this.graceLight);
+
+    this.gracePool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.5, 64),
+      new THREE.MeshBasicMaterial({
+        map: createLightPoolTexture(),
+        color: 0xf0d060,
+        transparent: true,
+        opacity: 0.62,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.gracePool.rotation.x = -Math.PI / 2;
+    this.gracePool.position.set(cx, -0.93, cz);
+    this.group.add(this.gracePool);
+
+    this.graceHalo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createRadialGlowTexture('#f0d060'),
+        color: 0xf0d060,
+        transparent: true,
+        opacity: 0.78,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.graceHalo.position.set(cx, cy + 0.18, cz);
+    this.graceHalo.scale.set(1.05, 1.55, 1);
+    this.group.add(this.graceHalo);
+
+    this.graceFlame = new THREE.Group();
+    this.graceFlame.position.set(cx, cy + 0.04, cz);
+    const flameTexture = createGraceFlameTexture();
+    const wisps = [
+      { x: 0, y: 0.18, z: 0, sx: 0.42, sy: 1.95, opacity: 0.95, phase: 0, speed: 1.2 },
+      { x: -0.04, y: 0.14, z: 0.03, sx: 0.3, sy: 1.65, opacity: 0.62, phase: 1.7, speed: 1.6 },
+      { x: 0.05, y: 0.1, z: -0.02, sx: 0.24, sy: 1.38, opacity: 0.48, phase: 3.1, speed: 1.45 },
+      { x: 0.02, y: 0.44, z: 0.01, sx: 0.18, sy: 0.92, opacity: 0.52, phase: 4.4, speed: 1.9 },
+    ];
+    for (const wisp of wisps) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: flameTexture,
+          color: 0xffef9a,
+          transparent: true,
+          opacity: wisp.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      sprite.position.set(wisp.x, wisp.y, wisp.z);
+      sprite.scale.set(wisp.sx, wisp.sy, 1);
+      sprite.userData = {
+        baseX: wisp.x,
+        baseY: wisp.y,
+        baseScaleX: wisp.sx,
+        baseScaleY: wisp.sy,
+        baseOpacity: wisp.opacity,
+        phase: wisp.phase,
+        speed: wisp.speed,
+      };
+      this.graceFlame.add(sprite);
+    }
+    this.group.add(this.graceFlame);
+  }
+
+  addWoodSign() {
+    this.signGroup = createWoodSign();
+    this.signGroup.position.set(1.7, -0.95, 0.55);
+    this.signGroup.rotation.y = -0.42;
+    this.group.add(this.signGroup);
+
+    // Hitbox covering the sign board so raycasts have a clean surface
+    this.signClickable = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2, 0.95, 0.18),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      })
+    );
+    this.signClickable.position.set(0, 1.18, 0);
+    this.signClickable.userData.clickTarget = 'sign';
+    this.signGroup.add(this.signClickable);
+
+    // Floating hint — small text prompt
+    this.signHint = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createHintTexture('Click sign to send word'),
+        transparent: true,
+        opacity: 0.82,
+        depthWrite: false,
+      })
+    );
+    const worldPos = this.signGroup.position.clone();
+    this.signHint.position.set(worldPos.x + 0.2, worldPos.y + 2.65, worldPos.z + 0.1);
+    this.signHint.scale.set(1.7, 0.34, 1);
+    this.group.add(this.signHint);
+  }
+
+  addParticles() {
+    this.motes = new THREE.Group();
+    const moteGeom = new THREE.SphereGeometry(0.018, 6, 6);
+    const moteMat = new THREE.MeshBasicMaterial({
+      color: 0xb6d2ee,
+      transparent: true,
+      opacity: 0.62,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    for (let i = 0; i < 30; i++) {
+      const mote = new THREE.Mesh(moteGeom, moteMat);
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.7 + Math.random() * 4.0;
+      const baseY = -0.4 + Math.random() * 2.6;
+      const baseX = Math.cos(angle) * radius;
+      const baseZ = Math.sin(angle) * radius;
+      mote.position.set(baseX, baseY, baseZ);
+      mote.userData = {
+        baseX,
+        baseY,
+        baseZ,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.14 + Math.random() * 0.18,
+        sway: 0.08 + Math.random() * 0.14,
+      };
+      this.motes.add(mote);
+    }
+    this.group.add(this.motes);
+  }
+
   getCameraConfig() {
     return {
-      position: [0.6, 1.35, 5.4],
-      target: [0, 0.1, 0],
-      orbitRadius: 0.18,
-      orbitSpeed: 0.14,
-      bobAmount: 0.05,
-      bobSpeed: 0.48,
+      position: [0, 1.45, 5.5],
+      target: [0, 0.18, -0.4],
+      orbitRadius: 0.16,
+      orbitSpeed: 0.13,
+      bobAmount: 0.04,
+      bobSpeed: 0.42,
+      mouseInfluence: 0.6,
     };
+  }
+
+  getInteractiveObjects() {
+    return [this.signClickable, this.signGroup].filter(Boolean);
+  }
+
+  handleSceneClick(hit) {
+    if (this.#isSignHit(hit)) this.#openSignReader();
+  }
+
+  handleSceneMiss() {
+    if (!this.signOverlay?.classList.contains('is-visible')) {
+      this.#closeSignOverlay();
+    }
+  }
+
+  handleSceneHover(hit) {
+    if (!this.signHint || this.isSignFocused) return;
+    const isSignHit = this.#isSignHit(hit);
+    this.signHint.scale.set(isSignHit ? 1.84 : 1.7, isSignHit ? 0.38 : 0.34, 1);
+  }
+
+  #isSignHit(hit) {
+    if (!hit) return false;
+    let obj = hit.object;
+    while (obj) {
+      if (obj === this.signGroup || obj === this.signClickable) return true;
+      obj = obj.parent;
+    }
+    return false;
+  }
+
+  #openSignReader() {
+    this.isSignFocused = true;
+    this.hasOpenedSignOverlay = false;
+  }
+
+  #closeSignOverlay() {
+    this.isSignFocused = false;
+    this.hasOpenedSignOverlay = false;
+    this.signOverlay?.classList.remove('is-visible');
+    this.signOverlay?.setAttribute('aria-hidden', 'true');
+  }
+
+  update(t, dt) {
+    super.update(t, dt);
+
+    // Grace flame animation
+    if (this.graceFlame) {
+      for (const sprite of this.graceFlame.children) {
+        const data = sprite.userData;
+        const wave = Math.sin(t * data.speed + data.phase);
+        sprite.position.x = data.baseX + Math.sin(t * 1.4 + data.phase) * 0.012;
+        sprite.position.y = data.baseY + Math.abs(wave) * 0.04;
+        sprite.scale.x = data.baseScaleX * (1 + Math.sin(t * 2.6 + data.phase) * 0.06);
+        sprite.scale.y = data.baseScaleY * (1 + wave * 0.08);
+        sprite.material.opacity = data.baseOpacity * (0.84 + 0.16 * Math.sin(t * 3.2 + data.phase));
+      }
+    }
+    if (this.graceLight) {
+      this.graceLight.intensity = 3.2 + Math.sin(t * 2.4) * 0.55;
+    }
+    if (this.graceHalo) {
+      const pulse = 1 + Math.sin(t * 1.7) * 0.04;
+      this.graceHalo.scale.set(1.05 * pulse, 1.55 * pulse, 1);
+    }
+    if (this.gracePool) {
+      this.gracePool.material.opacity = 0.6 + Math.sin(t * 1.9) * 0.06;
+    }
+
+    // Sign hint pulse
+    if (this.signHint && !this.isSignFocused) {
+      this.signHint.material.opacity = 0.7 + Math.sin(t * 1.6) * 0.16;
+    }
+
+    // Sign focus / overlay timing — slight delay before showing the panel
+    const target = this.isSignFocused ? 1 : 0;
+    const speed = this.isSignFocused ? 1.18 : 1.65;
+    this.signFocusProgress = THREE.MathUtils.clamp(
+      this.signFocusProgress + Math.sign(target - this.signFocusProgress) * dt * speed,
+      0,
+      1
+    );
+    if (this.isSignFocused && !this.hasOpenedSignOverlay && this.signFocusProgress > 0.5) {
+      this.hasOpenedSignOverlay = true;
+      this.signOverlay?.classList.add('is-visible');
+      this.signOverlay?.setAttribute('aria-hidden', 'false');
+    }
+
+    // Ambient motes
+    if (this.motes) {
+      for (const mote of this.motes.children) {
+        const d = mote.userData;
+        mote.position.x = d.baseX + Math.sin(t * 0.6 + d.phase) * d.sway;
+        mote.position.z = d.baseZ + Math.cos(t * 0.55 + d.phase * 1.3) * d.sway;
+        mote.position.y = d.baseY + (((t * d.speed + d.phase) % 2.6) - 1.3) * 0.4;
+      }
+    }
+  }
+
+  exit() {
+    this.#closeSignOverlay();
+    this.signFocusProgress = 0;
+    super.exit();
+  }
+
+  dispose() {
+    this.signOverlay?.remove();
+    super.dispose();
   }
 }
 
@@ -5599,4 +6027,719 @@ function createFlameArrow(yaw, lean) {
       }
     },
   };
+}
+
+// ── Contact scene helpers ───────────────────────────────────
+function createCastleEveningSkyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d');
+  const random = seededRandom(51823);
+
+  // Late evening: deep blue zenith, hint of warm amber near horizon
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#070b1c');
+  gradient.addColorStop(0.32, '#0f1933');
+  gradient.addColorStop(0.55, '#1a2748');
+  gradient.addColorStop(0.74, '#2c3252');
+  gradient.addColorStop(0.88, '#3a3148');
+  gradient.addColorStop(1, '#1a131c');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Faint stars near the top
+  for (let i = 0; i < 220; i++) {
+    const x = random() * canvas.width;
+    const y = random() * canvas.height * 0.5;
+    const r = random() * 1.2 + 0.18;
+    const a = 0.18 + random() * 0.45;
+    ctx.fillStyle = `rgba(${190 + Math.floor(random() * 50)}, ${200 + Math.floor(random() * 40)}, 255, ${a})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Soft horizon glow
+  const horizon = ctx.createLinearGradient(0, canvas.height * 0.7, 0, canvas.height);
+  horizon.addColorStop(0, 'rgba(120, 80, 70, 0)');
+  horizon.addColorStop(0.6, 'rgba(180, 110, 70, 0.08)');
+  horizon.addColorStop(1, 'rgba(20, 14, 22, 0.55)');
+  ctx.fillStyle = horizon;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Soft cloud bands
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.filter = 'blur(36px)';
+  for (let i = 0; i < 14; i++) {
+    ctx.fillStyle = `rgba(80, 96, 142, ${0.08 + random() * 0.08})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      random() * canvas.width,
+      canvas.height * (0.32 + random() * 0.28),
+      220 + random() * 320,
+      30 + random() * 70,
+      (random() - 0.5) * 0.28,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  return texture;
+}
+
+function createCastleWallTextureSet() {
+  // Hewn-stone masonry: rectangular blocks staggered in courses with mortar gaps
+  const w = 1024;
+  const h = 512;
+  const colorCanvas = document.createElement('canvas');
+  const roughCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = roughCanvas.width = bumpCanvas.width = w;
+  colorCanvas.height = roughCanvas.height = bumpCanvas.height = h;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughCtx = roughCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const random = seededRandom(73219);
+
+  // Mortar base — dark, slightly recessed
+  colorCtx.fillStyle = '#222732';
+  colorCtx.fillRect(0, 0, w, h);
+  roughCtx.fillStyle = 'rgb(238, 238, 238)';
+  roughCtx.fillRect(0, 0, w, h);
+  bumpCtx.fillStyle = 'rgb(48, 48, 48)';
+  bumpCtx.fillRect(0, 0, w, h);
+
+  const courseHeight = 78;
+  const blockWidth = 132;
+  const mortar = 5;
+
+  for (let row = 0; row * courseHeight < h + courseHeight; row++) {
+    const offset = row % 2 === 0 ? 0 : blockWidth / 2;
+    for (let col = -1; col * blockWidth + offset < w + blockWidth; col++) {
+      const bx = col * blockWidth + offset;
+      const by = row * courseHeight;
+      const bw = blockWidth - mortar * 2 + (random() - 0.5) * 8;
+      const bh = courseHeight - mortar * 2 + (random() - 0.5) * 6;
+      const x = bx + mortar + (random() - 0.5) * 2;
+      const y = by + mortar + (random() - 0.5) * 2;
+
+      // Block tone — cool grey-blue with slight per-block variance
+      const tone = 100 + random() * 36;
+      const r = tone + (random() - 0.5) * 14;
+      const g = tone + 4 + (random() - 0.5) * 10;
+      const b = tone + 18 + (random() - 0.5) * 12;
+
+      // Block face with slight chipped corners
+      colorCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      colorCtx.fillRect(x, y, bw, bh);
+
+      // Bevel highlight (top-left edge)
+      colorCtx.fillStyle = `rgba(${r + 22}, ${g + 22}, ${b + 22}, 0.42)`;
+      colorCtx.fillRect(x, y, bw, 2);
+      colorCtx.fillRect(x, y, 2, bh);
+
+      // Bevel shadow (bottom-right edge)
+      colorCtx.fillStyle = `rgba(${Math.max(0, r - 28)}, ${Math.max(0, g - 28)}, ${Math.max(0, b - 28)}, 0.5)`;
+      colorCtx.fillRect(x, y + bh - 2, bw, 2);
+      colorCtx.fillRect(x + bw - 2, y, 2, bh);
+
+      // Fine pitting / weathering
+      colorCtx.save();
+      colorCtx.globalAlpha = 0.16;
+      for (let s = 0; s < 12; s++) {
+        const sx = x + random() * bw;
+        const sy = y + random() * bh;
+        colorCtx.fillStyle = `rgb(${30 + random() * 50}, ${34 + random() * 50}, ${50 + random() * 50})`;
+        colorCtx.fillRect(sx, sy, 1 + random() * 2.5, 1 + random() * 2);
+      }
+      colorCtx.restore();
+
+      // Occasional moss patch in mortar joints
+      if (random() > 0.86) {
+        colorCtx.save();
+        colorCtx.globalAlpha = 0.4;
+        colorCtx.fillStyle = `rgb(${36 + random() * 18}, ${64 + random() * 26}, ${42 + random() * 16})`;
+        colorCtx.beginPath();
+        colorCtx.ellipse(
+          x + random() * bw,
+          y + bh - 2 + random() * 4,
+          4 + random() * 8,
+          2 + random() * 3,
+          0,
+          0,
+          Math.PI * 2
+        );
+        colorCtx.fill();
+        colorCtx.restore();
+      }
+
+      // Bump map: blocks stand proud of mortar
+      bumpCtx.fillStyle = `rgb(${188 + random() * 28}, ${188 + random() * 28}, ${188 + random() * 28})`;
+      bumpCtx.fillRect(x, y, bw, bh);
+
+      // Roughness: smoother face than mortar
+      roughCtx.fillStyle = `rgb(${204 + random() * 28}, ${204 + random() * 28}, ${204 + random() * 28})`;
+      roughCtx.fillRect(x, y, bw, bh);
+    }
+  }
+
+  // Subtle final noise to break up tiling artifacts
+  const colorImage = colorCtx.getImageData(0, 0, w, h);
+  for (let i = 0; i < colorImage.data.length; i += 4) {
+    const noise = (random() - 0.5) * 12;
+    colorImage.data[i] = Math.max(0, Math.min(255, colorImage.data[i] + noise));
+    colorImage.data[i + 1] = Math.max(0, Math.min(255, colorImage.data[i + 1] + noise));
+    colorImage.data[i + 2] = Math.max(0, Math.min(255, colorImage.data[i + 2] + noise));
+  }
+  colorCtx.putImageData(colorImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((t) => {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 16;
+    t.repeat.set(8, 1.2);
+  });
+  return { color, roughness, bump };
+}
+
+function createCastleTrimTextureSet() {
+  // Larger, darker plinth/cornice blocks — flatter and rougher
+  const w = 1024;
+  const h = 256;
+  const colorCanvas = document.createElement('canvas');
+  const roughCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = roughCanvas.width = bumpCanvas.width = w;
+  colorCanvas.height = roughCanvas.height = bumpCanvas.height = h;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughCtx = roughCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const random = seededRandom(38197);
+
+  colorCtx.fillStyle = '#1a1d24';
+  colorCtx.fillRect(0, 0, w, h);
+  roughCtx.fillStyle = 'rgb(244, 244, 244)';
+  roughCtx.fillRect(0, 0, w, h);
+  bumpCtx.fillStyle = 'rgb(50, 50, 50)';
+  bumpCtx.fillRect(0, 0, w, h);
+
+  const courseHeight = h;
+  const blockWidth = 256;
+  const mortar = 7;
+
+  for (let col = -1; col * blockWidth < w + blockWidth; col++) {
+    const x = col * blockWidth + mortar + (random() - 0.5) * 4;
+    const y = mortar + (random() - 0.5) * 2;
+    const bw = blockWidth - mortar * 2 + (random() - 0.5) * 10;
+    const bh = courseHeight - mortar * 2;
+    const tone = 86 + random() * 28;
+    const r = tone + (random() - 0.5) * 10;
+    const g = tone + 4 + (random() - 0.5) * 10;
+    const b = tone + 14 + (random() - 0.5) * 12;
+    colorCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    colorCtx.fillRect(x, y, bw, bh);
+
+    // Edge bevels
+    colorCtx.fillStyle = `rgba(${r + 20}, ${g + 20}, ${b + 20}, 0.4)`;
+    colorCtx.fillRect(x, y, bw, 3);
+    colorCtx.fillStyle = `rgba(${Math.max(0, r - 26)}, ${Math.max(0, g - 26)}, ${Math.max(0, b - 26)}, 0.46)`;
+    colorCtx.fillRect(x, y + bh - 3, bw, 3);
+
+    // Pits
+    colorCtx.save();
+    colorCtx.globalAlpha = 0.18;
+    for (let s = 0; s < 24; s++) {
+      colorCtx.fillStyle = `rgb(${30 + random() * 40}, ${34 + random() * 40}, ${48 + random() * 40})`;
+      colorCtx.fillRect(x + random() * bw, y + random() * bh, 1 + random() * 2, 1 + random() * 2);
+    }
+    colorCtx.restore();
+
+    bumpCtx.fillStyle = `rgb(${168 + random() * 22}, ${168 + random() * 22}, ${168 + random() * 22})`;
+    bumpCtx.fillRect(x, y, bw, bh);
+    roughCtx.fillStyle = `rgb(${214 + random() * 22}, ${214 + random() * 22}, ${214 + random() * 22})`;
+    roughCtx.fillRect(x, y, bw, bh);
+  }
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((t) => {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 16;
+    t.repeat.set(10, 1);
+  });
+  return { color, roughness, bump };
+}
+
+function createCastleFloorTextureSet() {
+  // Large flagstones with mortar between — cool damp stone tones
+  const size = 1024;
+  const colorCanvas = document.createElement('canvas');
+  const roughCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = roughCanvas.width = bumpCanvas.width = size;
+  colorCanvas.height = roughCanvas.height = bumpCanvas.height = size;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughCtx = roughCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const random = seededRandom(64217);
+
+  colorCtx.fillStyle = '#1a1d22';
+  colorCtx.fillRect(0, 0, size, size);
+  roughCtx.fillStyle = 'rgb(238, 238, 238)';
+  roughCtx.fillRect(0, 0, size, size);
+  bumpCtx.fillStyle = 'rgb(58, 58, 58)';
+  bumpCtx.fillRect(0, 0, size, size);
+
+  // Irregular tile placement — 4x4 grid with jittered tile borders
+  const tilesPerSide = 4;
+  const cell = size / tilesPerSide;
+  const mortar = 8;
+  for (let ry = 0; ry < tilesPerSide; ry++) {
+    for (let rx = 0; rx < tilesPerSide; rx++) {
+      const jitter = 10;
+      const x = rx * cell + mortar + (random() - 0.5) * jitter;
+      const y = ry * cell + mortar + (random() - 0.5) * jitter;
+      const tw = cell - mortar * 2 + (random() - 0.5) * 16;
+      const th = cell - mortar * 2 + (random() - 0.5) * 16;
+
+      const tone = 90 + random() * 32;
+      const r = tone + (random() - 0.5) * 12;
+      const g = tone + 4 + (random() - 0.5) * 10;
+      const b = tone + 16 + (random() - 0.5) * 12;
+
+      colorCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      colorCtx.fillRect(x, y, tw, th);
+
+      // Bevel
+      colorCtx.fillStyle = `rgba(${r + 18}, ${g + 18}, ${b + 18}, 0.35)`;
+      colorCtx.fillRect(x, y, tw, 2);
+      colorCtx.fillStyle = `rgba(${Math.max(0, r - 26)}, ${Math.max(0, g - 26)}, ${Math.max(0, b - 26)}, 0.4)`;
+      colorCtx.fillRect(x, y + th - 2, tw, 2);
+
+      // Cracks
+      if (random() > 0.6) {
+        colorCtx.save();
+        colorCtx.globalAlpha = 0.5;
+        colorCtx.strokeStyle = `rgba(${20 + random() * 26}, ${24 + random() * 26}, ${36 + random() * 26}, 0.7)`;
+        colorCtx.lineWidth = 1 + random();
+        colorCtx.beginPath();
+        const sx = x + random() * tw;
+        const sy = y + random() * th;
+        colorCtx.moveTo(sx, sy);
+        for (let k = 0; k < 4; k++) {
+          colorCtx.lineTo(sx + (random() - 0.5) * tw * 0.6, sy + (random() - 0.5) * th * 0.6);
+        }
+        colorCtx.stroke();
+        colorCtx.restore();
+      }
+
+      // Pitting
+      colorCtx.save();
+      colorCtx.globalAlpha = 0.18;
+      for (let s = 0; s < 22; s++) {
+        colorCtx.fillStyle = `rgb(${30 + random() * 40}, ${34 + random() * 40}, ${50 + random() * 40})`;
+        colorCtx.fillRect(x + random() * tw, y + random() * th, 1 + random() * 2.5, 1 + random() * 2);
+      }
+      colorCtx.restore();
+
+      // Damp moss in mortar joints sometimes
+      if (random() > 0.78) {
+        colorCtx.save();
+        colorCtx.globalAlpha = 0.38;
+        colorCtx.fillStyle = `rgb(${30 + random() * 16}, ${56 + random() * 24}, ${42 + random() * 16})`;
+        colorCtx.beginPath();
+        colorCtx.ellipse(
+          x + random() * tw,
+          y + th - 1 + random() * 4,
+          4 + random() * 10,
+          2 + random() * 3,
+          0,
+          0,
+          Math.PI * 2
+        );
+        colorCtx.fill();
+        colorCtx.restore();
+      }
+
+      bumpCtx.fillStyle = `rgb(${184 + random() * 22}, ${184 + random() * 22}, ${184 + random() * 22})`;
+      bumpCtx.fillRect(x, y, tw, th);
+      roughCtx.fillStyle = `rgb(${198 + random() * 26}, ${198 + random() * 26}, ${198 + random() * 26})`;
+      roughCtx.fillRect(x, y, tw, th);
+    }
+  }
+
+  const colorImage = colorCtx.getImageData(0, 0, size, size);
+  for (let i = 0; i < colorImage.data.length; i += 4) {
+    const noise = (random() - 0.5) * 10;
+    colorImage.data[i] = Math.max(0, Math.min(255, colorImage.data[i] + noise));
+    colorImage.data[i + 1] = Math.max(0, Math.min(255, colorImage.data[i + 1] + noise));
+    colorImage.data[i + 2] = Math.max(0, Math.min(255, colorImage.data[i + 2] + noise));
+  }
+  colorCtx.putImageData(colorImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((t) => {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 16;
+    t.repeat.set(4, 4);
+  });
+  return { color, roughness, bump };
+}
+
+function createWoodSignTextureSet() {
+  const w = 256;
+  const h = 1024;
+  const colorCanvas = document.createElement('canvas');
+  const roughCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = roughCanvas.width = bumpCanvas.width = w;
+  colorCanvas.height = roughCanvas.height = bumpCanvas.height = h;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughCtx = roughCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(w, h);
+  const roughImage = roughCtx.createImageData(w, h);
+  const bumpImage = bumpCtx.createImageData(w, h);
+  const random = seededRandom(91232);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      // Vertical grain — slow drift along x
+      const drift = Math.sin(y * 0.0035) * 1.6;
+      const grain = Math.sin((x + drift) * 0.18 + Math.sin(y * 0.012) * 1.5) * 0.5 + 0.5;
+      const ringDarkness = Math.pow(Math.abs(Math.sin((x + drift) * 0.04 + y * 0.001)), 6) * 0.6;
+      const speck = random() * 0.18;
+      const value = 96 + grain * 18 - ringDarkness * 28 + speck * 10;
+      const v = Math.max(54, Math.min(154, value));
+      colorImage.data[i] = v + 22;
+      colorImage.data[i + 1] = v - 4;
+      colorImage.data[i + 2] = v - 26;
+      colorImage.data[i + 3] = 255;
+
+      const r = 222 + random() * 22 - ringDarkness * 26;
+      roughImage.data[i] = r;
+      roughImage.data[i + 1] = r;
+      roughImage.data[i + 2] = r;
+      roughImage.data[i + 3] = 255;
+
+      const b = 110 + grain * 36 - ringDarkness * 50 + random() * 20;
+      bumpImage.data[i] = b;
+      bumpImage.data[i + 1] = b;
+      bumpImage.data[i + 2] = b;
+      bumpImage.data[i + 3] = 255;
+    }
+  }
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughCtx.putImageData(roughImage, 0, 0);
+  bumpCtx.putImageData(bumpImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((t) => {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+  });
+  return { color, roughness, bump };
+}
+
+function createSignBoardTexture() {
+  const w = 1024;
+  const h = 768;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const random = seededRandom(40123);
+
+  // Wood gradient base
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#6c4421');
+  grad.addColorStop(0.45, '#7a4f2c');
+  grad.addColorStop(1, '#553a1d');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Plank gap line down the middle (subtle)
+  ctx.fillStyle = 'rgba(20, 12, 4, 0.3)';
+  ctx.fillRect(w / 2 - 1, 0, 2, h);
+
+  // Wood grain
+  ctx.globalAlpha = 0.18;
+  ctx.strokeStyle = '#3b2810';
+  for (let i = 0; i < 30; i++) {
+    ctx.beginPath();
+    ctx.lineWidth = 1 + random() * 2;
+    const y = i * (h / 30) + (random() - 0.5) * 12;
+    ctx.moveTo(0, y);
+    for (let x = 0; x < w; x += 28) {
+      ctx.lineTo(x, y + Math.sin(x * 0.012 + i * 0.3) * 4 + (random() - 0.5) * 1.5);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Knots
+  for (let i = 0; i < 5; i++) {
+    const x = random() * w;
+    const y = random() * h;
+    const r = 8 + random() * 22;
+    const knot = ctx.createRadialGradient(x, y, 0, x, y, r);
+    knot.addColorStop(0, 'rgba(34, 20, 8, 0.92)');
+    knot.addColorStop(0.55, 'rgba(58, 36, 14, 0.42)');
+    knot.addColorStop(1, 'rgba(70, 44, 18, 0)');
+    ctx.fillStyle = knot;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Iron rivets in corners
+  const rivetXY = [[64, 60], [w - 64, 60], [64, h - 60], [w - 64, h - 60]];
+  for (const [x, y] of rivetXY) {
+    const rivet = ctx.createRadialGradient(x, y, 0, x, y, 18);
+    rivet.addColorStop(0, '#3b3a36');
+    rivet.addColorStop(0.6, '#1c1b18');
+    rivet.addColorStop(1, 'rgba(8, 8, 6, 0)');
+    ctx.fillStyle = rivet;
+    ctx.beginPath();
+    ctx.arc(x, y, 18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Carved/burned title
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 132px "Cormorant Garamond", "Times New Roman", Georgia, serif';
+  ctx.shadowColor = 'rgba(8, 4, 0, 0.8)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = '#1a0e04';
+  ctx.fillText('Send Word', w / 2, h * 0.4);
+
+  // Subtitle
+  ctx.font = '500 56px "Cormorant Garamond", Georgia, serif';
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = '#2a1a08';
+  ctx.fillText('— Roundtable Hold —', w / 2, h * 0.6);
+
+  // Hint
+  ctx.shadowBlur = 0;
+  ctx.font = 'italic 38px Georgia, serif';
+  ctx.fillStyle = '#3e2710';
+  ctx.fillText('click to read', w / 2, h * 0.78);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 16;
+  return texture;
+}
+
+function createWoodSign() {
+  const group = new THREE.Group();
+  const woodTex = createWoodSignTextureSet();
+  const woodMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8a6035,
+    map: woodTex.color,
+    roughnessMap: woodTex.roughness,
+    bumpMap: woodTex.bump,
+    bumpScale: 0.06,
+    roughness: 0.9,
+    metalness: 0.04,
+  });
+  const darkWoodMaterial = woodMaterial.clone();
+  darkWoodMaterial.color = new THREE.Color(0x593a1a);
+  const ironMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3a3832,
+    roughness: 0.55,
+    metalness: 0.78,
+  });
+  const ropeMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4a3a22,
+    roughness: 0.95,
+    metalness: 0,
+  });
+
+  // Vertical post planted in the ground
+  const postHeight = 2.0;
+  const post = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.072, postHeight, 14),
+    woodMaterial
+  );
+  post.position.y = postHeight / 2;
+  post.castShadow = true;
+  post.receiveShadow = true;
+  group.add(post);
+
+  // Ornamental cap on top of the post
+  const cap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.105, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    darkWoodMaterial
+  );
+  cap.position.y = postHeight;
+  cap.castShadow = true;
+  group.add(cap);
+
+  // Horizontal cross-arm near the top
+  const armWidth = 1.25;
+  const arm = new THREE.Mesh(
+    new THREE.BoxGeometry(armWidth, 0.09, 0.11),
+    woodMaterial
+  );
+  arm.position.y = postHeight - 0.12;
+  arm.castShadow = true;
+  arm.receiveShadow = true;
+  group.add(arm);
+
+  // Iron caps on the cross-arm ends
+  for (const x of [-armWidth / 2, armWidth / 2]) {
+    const armCap = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.13, 0.14),
+      ironMaterial
+    );
+    armCap.position.set(x, postHeight - 0.12, 0);
+    armCap.castShadow = true;
+    group.add(armCap);
+  }
+
+  // Sign board hanging below the cross-arm
+  const boardWidth = 1.05;
+  const boardHeight = 0.78;
+  const boardTexture = createSignBoardTexture();
+  const boardFaceMaterial = new THREE.MeshStandardMaterial({
+    map: boardTexture,
+    roughness: 0.88,
+    metalness: 0.02,
+    bumpMap: woodTex.bump,
+    bumpScale: 0.05,
+    emissive: 0x1c1408,
+    emissiveIntensity: 0.06,
+  });
+  const board = new THREE.Mesh(
+    new THREE.BoxGeometry(boardWidth, boardHeight, 0.045),
+    [woodMaterial, woodMaterial, woodMaterial, woodMaterial, boardFaceMaterial, woodMaterial]
+  );
+  board.position.y = postHeight - 0.7;
+  board.castShadow = true;
+  board.receiveShadow = true;
+  group.add(board);
+
+  // Two ropes connecting the board to the cross-arm
+  for (const x of [-0.45, 0.45]) {
+    const rope = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.009, 0.009, 0.34, 8),
+      ropeMaterial
+    );
+    rope.position.set(x, postHeight - 0.28, 0);
+    group.add(rope);
+
+    // Tied knot at the rope's bottom end
+    const knot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.02, 10, 8),
+      ropeMaterial
+    );
+    knot.position.set(x, postHeight - 0.42, 0);
+    group.add(knot);
+
+    // Iron eye where the rope meets the board
+    const eye = new THREE.Mesh(
+      new THREE.TorusGeometry(0.022, 0.005, 6, 14),
+      ironMaterial
+    );
+    eye.rotation.x = Math.PI / 2;
+    eye.position.set(x, postHeight - 0.4, 0.015);
+    group.add(eye);
+  }
+
+  return group;
+}
+
+function createContactReaderOverlay(content, onClose) {
+  const app = document.getElementById('app');
+  const overlay = document.createElement('section');
+  overlay.className = 'tablet-reader contact-reader';
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', `${content.title} contact information`);
+
+  const panel = document.createElement('article');
+  panel.className = 'tablet-reader__panel';
+
+  const closeButton = document.createElement('button');
+  closeButton.className = 'tablet-reader__close';
+  closeButton.type = 'button';
+  closeButton.textContent = 'Close';
+  closeButton.addEventListener('click', onClose);
+
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'tablet-reader__eyebrow';
+  eyebrow.textContent = content.metadata ?? '';
+
+  const title = document.createElement('h2');
+  title.className = 'tablet-reader__title';
+  title.textContent = content.title;
+
+  const body = document.createElement('div');
+  body.className = 'tablet-reader__body';
+
+  if (content.intro) {
+    const p = document.createElement('p');
+    p.textContent = content.intro;
+    body.append(p);
+  }
+
+  const list = document.createElement('ul');
+  list.className = 'contact-reader__list';
+  for (const link of content.links ?? []) {
+    const item = document.createElement('li');
+    item.className = 'contact-reader__item';
+
+    const label = document.createElement('span');
+    label.className = 'contact-reader__label';
+    label.textContent = link.label;
+
+    const anchor = document.createElement('a');
+    anchor.className = 'contact-reader__link';
+    anchor.textContent = link.value;
+    anchor.href = link.href;
+    if (!link.href.startsWith('mailto:')) {
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+    }
+
+    item.append(label, anchor);
+    list.append(item);
+  }
+  body.append(list);
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) onClose();
+  });
+
+  panel.append(closeButton, eyebrow, title, body);
+  overlay.append(panel);
+  app?.append(overlay);
+  return overlay;
 }

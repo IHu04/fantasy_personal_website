@@ -1773,14 +1773,410 @@ class ProjectMarker extends THREE.Group {
   }
 }
 
-class SkillsScene extends GraceRegionScene {
+const skillSwordEntries = [
+  { name: 'Frontend Craft' },
+  { name: 'Interaction Design' },
+  { name: 'Data Modeling' },
+  { name: 'Visual Systems' },
+  { name: 'Automation' },
+];
+
+class SkillsScene extends RegionScene {
+  group = new THREE.Group();
+
+  grace = null;
+  graceLight = null;
+  graceHalo = null;
+  graceFlame = null;
+  gracePool = null;
+
+  swords = [];
+  arrows = [];
+
+  motes = null;
+  moteData = [];
+
+  init() {
+    this.scene.background = createSkillsNightSkyTexture();
+    this.scene.fog = new THREE.FogExp2(0x06070d, 0.082);
+    this.scene.add(this.group);
+
+    this.addLighting();
+    this.addGround();
+    this.addRubble();
+    this.addRuinSilhouettes();
+    this.addSiteOfGrace();
+    this.addSwordRow();
+    this.addFlameArrows();
+    this.addParticles();
+    this.addContent();
+  }
+
+  addLighting() {
+    // Very dim ambient — the arrows and grace are the dominant light
+    const ambient = new THREE.AmbientLight(0x14182a, 0.22);
+    this.scene.add(ambient);
+
+    const hemi = new THREE.HemisphereLight(0x2c3050, 0x05060a, 0.32);
+    this.scene.add(hemi);
+
+    // A faint warm fill from the centered grace toward camera
+    const graceFill = new THREE.PointLight(0xffb866, 1.4, 5.5, 1.6);
+    graceFill.position.set(0, 0.6, 0.8);
+    this.scene.add(graceFill);
+  }
+
   addGround() {
-    super.addGround();
-    const grid = new THREE.GridHelper(5.4, 18, this.palette.primary, this.palette.accent);
-    grid.position.y = -1.02;
-    grid.material.transparent = true;
-    grid.material.opacity = 0.2;
-    this.group.add(grid);
+    const geometry = new THREE.PlaneGeometry(58, 58, 130, 130);
+    const position = geometry.attributes.position;
+    const random = seededRandom(13771);
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i);
+      const y = position.getY(i);
+      const broad =
+        Math.sin(x * 0.21) * 0.07 +
+        Math.cos(y * 0.18) * 0.06 +
+        Math.sin((x + y) * 0.07) * 0.05;
+      const grit = (random() - 0.5) * 0.045;
+      const falloff = Math.min(1, Math.hypot(x, y) / 22);
+      position.setZ(i, (broad + grit) * (0.55 + falloff * 0.55));
+    }
+    geometry.computeVertexNormals();
+    geometry.rotateX(-Math.PI / 2);
+
+    const textures = createSkillsGroundTextureSet();
+    const ground = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        color: 0x161821,
+        map: textures.color,
+        roughnessMap: textures.roughness,
+        bumpMap: textures.bump,
+        bumpScale: 0.085,
+        roughness: 0.97,
+        metalness: 0.04,
+      })
+    );
+    ground.position.y = -0.98;
+    ground.receiveShadow = true;
+    this.group.add(ground);
+  }
+
+  addRubble() {
+    const baseMaterial = createRockMaterial();
+    const darkRockMaterial = baseMaterial.clone();
+    darkRockMaterial.map = baseMaterial.map;
+    darkRockMaterial.roughnessMap = baseMaterial.roughnessMap;
+    darkRockMaterial.bumpMap = baseMaterial.bumpMap;
+    darkRockMaterial.color = new THREE.Color(0x4a4942);
+    darkRockMaterial.bumpScale = 0.13;
+    darkRockMaterial.roughness = 0.98;
+
+    const rocks = [
+      [-2.3, -0.92, 1.3, 0.34, 11],
+      [2.2, -0.93, 1.4, 0.30, 23],
+      [-3.1, -0.92, -0.4, 0.42, 47],
+      [3.0, -0.92, -0.5, 0.45, 61],
+      [-1.5, -0.97, -2.0, 0.22, 79],
+      [1.6, -0.96, -2.1, 0.24, 97],
+      [-4.2, -0.92, -2.6, 0.55, 113],
+      [4.1, -0.93, -2.5, 0.58, 131],
+      [-2.6, -0.95, -3.6, 0.36, 149],
+      [2.7, -0.95, -3.7, 0.34, 167],
+      [-0.9, -0.96, 1.9, 0.18, 181],
+      [0.95, -0.97, 1.8, 0.20, 197],
+      [-3.9, -0.94, 0.8, 0.30, 211],
+      [3.8, -0.94, 0.85, 0.32, 229],
+      [-2.0, -0.97, 2.6, 0.16, 241],
+      [2.0, -0.96, 2.5, 0.18, 257],
+    ];
+
+    for (const [x, y, z, scale, seed] of rocks) {
+      const rock = new THREE.Mesh(createWeatheredRockGeometry(seed), darkRockMaterial);
+      rock.position.set(x, y + scale * 0.45, z);
+      rock.scale.set(scale, scale * (0.55 + (seed % 7) * 0.04), scale * (0.85 + (seed % 5) * 0.03));
+      rock.rotation.set((seed % 9) * 0.12, seed * 0.31, (seed % 11) * 0.08);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      this.group.add(rock);
+    }
+
+    // Broken column fragments — short cylindrical chunks lying around
+    const columnMaterial = createMarbleMaterial({
+      tint: 0x6f6a5e,
+      veinStrength: 0.55,
+      speckStrength: 0.5,
+    });
+    columnMaterial.color = new THREE.Color(0x55514a);
+    columnMaterial.roughness = 0.95;
+
+    const fragments = [
+      [-3.0, -0.78, -1.2, 0.62, Math.PI / 2.05, 0.18],
+      [3.1, -0.78, -1.4, 0.58, Math.PI / 2.0, -0.22],
+      [-1.9, -0.82, -3.6, 0.5, Math.PI / 2.2, 0.6],
+      [2.0, -0.82, -3.7, 0.52, Math.PI / 2.3, -0.5],
+      [-4.4, -0.74, 0.0, 0.78, Math.PI / 2.0, 0.05],
+    ];
+    for (const [x, y, z, len, rot, yaw] of fragments) {
+      const chunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.24, len, 18, 1),
+        columnMaterial
+      );
+      chunk.position.set(x, y, z);
+      chunk.rotation.set(rot, yaw, 0);
+      chunk.castShadow = true;
+      chunk.receiveShadow = true;
+      this.group.add(chunk);
+    }
+  }
+
+  addRuinSilhouettes() {
+    // A few standing fractured columns far back to break the horizon
+    const material = createMarbleMaterial({
+      tint: 0x4f4a40,
+      veinStrength: 0.6,
+      speckStrength: 0.55,
+    });
+    material.color = new THREE.Color(0x35332d);
+    material.roughness = 0.96;
+
+    const standing = [
+      [-5.4, -0.95, -5.0, 1.85, 0.34],
+      [5.3, -0.95, -5.2, 2.05, 0.38],
+      [-3.4, -0.95, -6.4, 1.45, 0.30],
+      [3.2, -0.95, -6.6, 1.6, 0.32],
+      [0.2, -0.95, -7.0, 2.4, 0.42],
+    ];
+    for (const [x, y, z, height, radius] of standing) {
+      const col = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius * 1.06, height, 22, 1),
+        material
+      );
+      col.position.set(x, y + height / 2, z);
+      col.rotation.z = (Math.sin(x * 0.6) * 0.04);
+      col.rotation.y = Math.cos(z * 0.4) * 0.2;
+      col.castShadow = true;
+      col.receiveShadow = true;
+      this.group.add(col);
+    }
+  }
+
+  addSiteOfGrace() {
+    const cx = 0;
+    const cy = -0.15;
+    const cz = 0;
+
+    this.grace = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 24, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff2a6,
+        transparent: true,
+        opacity: 1,
+      })
+    );
+    this.grace.position.set(cx, cy, cz);
+    this.group.add(this.grace);
+
+    this.graceLight = new THREE.PointLight(0xf0d060, 3.6, 9);
+    this.graceLight.position.set(cx, cy + 0.2, cz);
+    this.group.add(this.graceLight);
+
+    this.gracePool = new THREE.Mesh(
+      new THREE.CircleGeometry(1.5, 64),
+      new THREE.MeshBasicMaterial({
+        map: createLightPoolTexture(),
+        color: 0xf0d060,
+        transparent: true,
+        opacity: 0.66,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.gracePool.rotation.x = -Math.PI / 2;
+    this.gracePool.position.set(cx, -0.93, cz);
+    this.group.add(this.gracePool);
+
+    this.graceHalo = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: createRadialGlowTexture('#f0d060'),
+        color: 0xf0d060,
+        transparent: true,
+        opacity: 0.78,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    this.graceHalo.position.set(cx, cy + 0.18, cz);
+    this.graceHalo.scale.set(1.05, 1.55, 1);
+    this.group.add(this.graceHalo);
+
+    this.graceFlame = new THREE.Group();
+    this.graceFlame.position.set(cx, cy + 0.04, cz);
+    const flameTexture = createGraceFlameTexture();
+    const wisps = [
+      { x: 0, y: 0.18, z: 0, sx: 0.42, sy: 1.95, opacity: 0.95, phase: 0, speed: 1.2 },
+      { x: -0.04, y: 0.14, z: 0.03, sx: 0.3, sy: 1.65, opacity: 0.62, phase: 1.7, speed: 1.6 },
+      { x: 0.05, y: 0.1, z: -0.02, sx: 0.24, sy: 1.38, opacity: 0.48, phase: 3.1, speed: 1.45 },
+      { x: 0.02, y: 0.44, z: 0.01, sx: 0.18, sy: 0.92, opacity: 0.52, phase: 4.4, speed: 1.9 },
+    ];
+    for (const wisp of wisps) {
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: flameTexture,
+          color: 0xffef9a,
+          transparent: true,
+          opacity: wisp.opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+      );
+      sprite.position.set(wisp.x, wisp.y, wisp.z);
+      sprite.scale.set(wisp.sx, wisp.sy, 1);
+      sprite.userData = {
+        baseX: wisp.x,
+        baseY: wisp.y,
+        baseScaleX: wisp.sx,
+        baseScaleY: wisp.sy,
+        baseOpacity: wisp.opacity,
+        phase: wisp.phase,
+        speed: wisp.speed,
+      };
+      this.graceFlame.add(sprite);
+    }
+    this.group.add(this.graceFlame);
+  }
+
+  addSwordRow() {
+    const count = skillSwordEntries.length;
+    const span = 5.4;
+    const baseZ = -2.8;
+
+    for (let i = 0; i < count; i++) {
+      const t = count > 1 ? i / (count - 1) : 0.5;
+      const x = -span / 2 + span * t;
+      const distFromCenter = Math.abs(x);
+      // Slight arc so outer swords sit a touch back
+      const z = baseZ - distFromCenter * 0.22;
+
+      const sword = createSkillSword(skillSwordEntries[i].name, i * 13 + 7);
+      sword.position.set(x, -1.02, z);
+      sword.rotation.y = (i - (count - 1) / 2) * -0.04;
+      sword.rotation.z = Math.sin(i * 1.7) * 0.03;
+      sword.castShadow = true;
+
+      this.swords.push(sword);
+      this.group.add(sword);
+    }
+  }
+
+  addFlameArrows() {
+    // Flame-tipped arrows planted around the scene as primary light sources
+    const configs = [
+      { x: -1.7, z: 1.05, yaw: 0.55, lean: 0.32 },
+      { x: 1.75, z: 1.0, yaw: -0.5, lean: 0.34 },
+      { x: -3.05, z: -0.45, yaw: 0.75, lean: 0.42 },
+      { x: 3.1, z: -0.5, yaw: -0.7, lean: 0.42 },
+      { x: -1.0, z: -1.45, yaw: 0.25, lean: 0.18 },
+      { x: 1.05, z: -1.5, yaw: -0.25, lean: 0.18 },
+      { x: -2.4, z: -4.4, yaw: 0.6, lean: 0.5 },
+      { x: 2.5, z: -4.4, yaw: -0.6, lean: 0.5 },
+    ];
+
+    for (const cfg of configs) {
+      const arrow = createFlameArrow(cfg.yaw, cfg.lean);
+      arrow.group.position.set(cfg.x, -0.95, cfg.z);
+      this.arrows.push(arrow);
+      this.group.add(arrow.group);
+    }
+  }
+
+  addParticles() {
+    this.motes = new THREE.Group();
+    const moteGeometry = new THREE.SphereGeometry(0.02, 8, 6);
+    const moteMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffc878,
+      transparent: true,
+      opacity: 0.78,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    for (let i = 0; i < 38; i++) {
+      const mote = new THREE.Mesh(moteGeometry, moteMaterial);
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.6 + Math.random() * 4.8;
+      const baseX = Math.cos(angle) * radius;
+      const baseZ = Math.sin(angle) * radius;
+      const baseY = -0.55 + Math.random() * 1.4;
+      mote.position.set(baseX, baseY, baseZ);
+      mote.userData = {
+        baseX,
+        baseY,
+        baseZ,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.18 + Math.random() * 0.24,
+        sway: 0.08 + Math.random() * 0.14,
+      };
+      this.motes.add(mote);
+    }
+    this.group.add(this.motes);
+  }
+
+  addContent() {
+    const tablet = createRegionTablet(this.region);
+    tablet.position.set(3.7, 0.42, -1.3);
+    tablet.rotation.set(-0.05, -0.42, 0.02);
+    tablet.scale.setScalar(0.7);
+    this.group.add(tablet);
+  }
+
+  getCameraConfig() {
+    return {
+      position: [0, 1.55, 6.2],
+      target: [0, 0.05, -0.4],
+      orbitRadius: 0.18,
+      orbitSpeed: 0.12,
+      bobAmount: 0.05,
+      bobSpeed: 0.42,
+    };
+  }
+
+  update(t, dt) {
+    super.update(t, dt);
+
+    if (this.graceFlame) {
+      for (const sprite of this.graceFlame.children) {
+        const data = sprite.userData;
+        const wave = Math.sin(t * data.speed + data.phase);
+        sprite.position.x = data.baseX + Math.sin(t * 1.4 + data.phase) * 0.012;
+        sprite.position.y = data.baseY + Math.abs(wave) * 0.04;
+        sprite.scale.x = data.baseScaleX * (1 + Math.sin(t * 2.6 + data.phase) * 0.06);
+        sprite.scale.y = data.baseScaleY * (1 + wave * 0.08);
+        sprite.material.opacity = data.baseOpacity * (0.84 + 0.16 * Math.sin(t * 3.2 + data.phase));
+      }
+    }
+    if (this.graceLight) {
+      this.graceLight.intensity = 3.2 + Math.sin(t * 2.4) * 0.55;
+    }
+    if (this.graceHalo) {
+      const pulse = 1 + Math.sin(t * 1.7) * 0.04;
+      this.graceHalo.scale.set(1.05 * pulse, 1.55 * pulse, 1);
+    }
+    if (this.gracePool) {
+      this.gracePool.material.opacity = 0.6 + Math.sin(t * 1.9) * 0.06;
+    }
+
+    for (const arrow of this.arrows) arrow.update(t);
+    for (const sword of this.swords) sword.userData.update?.(t);
+
+    if (this.motes) {
+      for (const mote of this.motes.children) {
+        const d = mote.userData;
+        mote.position.x = d.baseX + Math.sin(t * 0.6 + d.phase) * d.sway;
+        mote.position.z = d.baseZ + Math.cos(t * 0.55 + d.phase * 1.3) * d.sway;
+        mote.position.y = d.baseY + (((t * d.speed + d.phase) % 2.6) - 1.3) * 0.6;
+      }
+    }
   }
 }
 
@@ -4268,4 +4664,567 @@ function drawFlameLobe(ctx, { color, blur, width, yTop, yBottom }) {
   ctx.closePath();
   ctx.fill();
   ctx.restore();
+}
+
+// ── Skills scene helpers ────────────────────────────────────
+function createSkillsNightSkyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d');
+  const random = seededRandom(28941);
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#02030a');
+  gradient.addColorStop(0.32, '#05071a');
+  gradient.addColorStop(0.6, '#09091a');
+  gradient.addColorStop(0.82, '#0a0810');
+  gradient.addColorStop(1, '#040406');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Sparse stars
+  for (let i = 0; i < 460; i++) {
+    const x = random() * canvas.width;
+    const y = random() * canvas.height * 0.7;
+    const r = random() * 1.4 + 0.2;
+    const a = 0.18 + random() * 0.6;
+    ctx.fillStyle = `rgba(${190 + Math.floor(random() * 50)}, ${200 + Math.floor(random() * 40)}, 255, ${a})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Heavy dark cloud bands to keep the night feeling oppressive
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.filter = 'blur(50px)';
+  ctx.fillStyle = 'rgba(2, 3, 8, 0.55)';
+  for (let i = 0; i < 18; i++) {
+    ctx.beginPath();
+    ctx.ellipse(
+      random() * canvas.width,
+      canvas.height * (0.42 + random() * 0.4),
+      220 + random() * 360,
+      40 + random() * 90,
+      (random() - 0.5) * 0.32,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Deep horizon vignette
+  const horizon = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);
+  horizon.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  horizon.addColorStop(0.55, 'rgba(0, 0, 0, 0.42)');
+  horizon.addColorStop(1, 'rgba(0, 0, 0, 0.92)');
+  ctx.fillStyle = horizon;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  return texture;
+}
+
+function createSkillsGroundTextureSet() {
+  const size = 512;
+  const colorCanvas = document.createElement('canvas');
+  const roughnessCanvas = document.createElement('canvas');
+  const bumpCanvas = document.createElement('canvas');
+  colorCanvas.width = colorCanvas.height = size;
+  roughnessCanvas.width = roughnessCanvas.height = size;
+  bumpCanvas.width = bumpCanvas.height = size;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughnessCtx = roughnessCanvas.getContext('2d');
+  const bumpCtx = bumpCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(size, size);
+  const roughnessImage = roughnessCtx.createImageData(size, size);
+  const bumpImage = bumpCtx.createImageData(size, size);
+  const random = seededRandom(20451);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const broad = Math.sin(x * 0.034 + y * 0.026) * 0.5 + Math.cos(y * 0.052 - x * 0.018) * 0.5;
+      const cracks = Math.pow(Math.abs(Math.sin(x * 0.08 + y * 0.03)), 9);
+      const speck = random();
+      const ash = random() > 0.86 ? 0.32 : 0;
+      const grit = random() > 0.92 ? 18 : 0;
+      const value = 36 + broad * 14 + speck * 18 - cracks * 28 - ash * 12;
+      colorImage.data[i] = Math.max(10, Math.min(74, value + 4));
+      colorImage.data[i + 1] = Math.max(8, Math.min(64, value + 1));
+      colorImage.data[i + 2] = Math.max(8, Math.min(58, value - 6));
+      colorImage.data[i + 3] = 255;
+
+      const roughness = 222 + speck * 28 - ash * 18;
+      roughnessImage.data[i] = roughness;
+      roughnessImage.data[i + 1] = roughness;
+      roughnessImage.data[i + 2] = roughness;
+      roughnessImage.data[i + 3] = 255;
+
+      const bump = 100 + broad * 36 + speck * 64 - cracks * 60 + grit;
+      bumpImage.data[i] = bump;
+      bumpImage.data[i + 1] = bump;
+      bumpImage.data[i + 2] = bump;
+      bumpImage.data[i + 3] = 255;
+    }
+  }
+
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughnessCtx.putImageData(roughnessImage, 0, 0);
+  bumpCtx.putImageData(bumpImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughnessCanvas);
+  const bump = new THREE.CanvasTexture(bumpCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness, bump].forEach((texture) => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(7, 7);
+    texture.anisotropy = 8;
+  });
+  return { color, roughness, bump };
+}
+
+function createSwordBladeTextureSet() {
+  const size = 512;
+  const colorCanvas = document.createElement('canvas');
+  const roughCanvas = document.createElement('canvas');
+  colorCanvas.width = roughCanvas.width = 128;
+  colorCanvas.height = roughCanvas.height = size;
+  const colorCtx = colorCanvas.getContext('2d');
+  const roughCtx = roughCanvas.getContext('2d');
+  const colorImage = colorCtx.createImageData(128, size);
+  const roughImage = roughCtx.createImageData(128, size);
+  const random = seededRandom(80213);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < 128; x++) {
+      const i = (y * 128 + x) * 4;
+      const fromCenter = Math.abs(x - 64) / 64;
+      const grain = Math.sin(y * 0.3 + Math.sin(x * 0.04) * 6) * 0.5 + 0.5;
+      const scratch = Math.pow(Math.abs(Math.sin(y * 0.085 + x * 0.013)), 8);
+      const fleck = random() > 0.985 ? 24 : 0;
+      const tarnish = random() > 0.92 ? 18 : 0;
+      const base = 188 - fromCenter * 28 + grain * 18 - scratch * 32 - tarnish;
+      colorImage.data[i] = Math.max(74, Math.min(232, base + 6 + fleck));
+      colorImage.data[i + 1] = Math.max(74, Math.min(232, base + 2 + fleck));
+      colorImage.data[i + 2] = Math.max(74, Math.min(232, base - 4));
+      colorImage.data[i + 3] = 255;
+
+      const r = 60 + scratch * 90 + tarnish + random() * 20;
+      roughImage.data[i] = r;
+      roughImage.data[i + 1] = r;
+      roughImage.data[i + 2] = r;
+      roughImage.data[i + 3] = 255;
+    }
+  }
+  colorCtx.putImageData(colorImage, 0, 0);
+  roughCtx.putImageData(roughImage, 0, 0);
+
+  const color = new THREE.CanvasTexture(colorCanvas);
+  const roughness = new THREE.CanvasTexture(roughCanvas);
+  color.colorSpace = THREE.SRGBColorSpace;
+  [color, roughness].forEach((t) => {
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+  });
+  return { color, roughness };
+}
+
+function createSkillSword(skillName, seed) {
+  const random = seededRandom(seed * 311 + 7);
+  const group = new THREE.Group();
+
+  const blade = createSwordBladeTextureSet();
+  const bladeMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc8d2dc,
+    map: blade.color,
+    roughnessMap: blade.roughness,
+    emissive: 0x1a2030,
+    emissiveIntensity: 0.06,
+    roughness: 0.28,
+    metalness: 0.86,
+    envMapIntensity: 0.6,
+  });
+  const guardMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9c7c34,
+    emissive: 0x3a2810,
+    emissiveIntensity: 0.12,
+    roughness: 0.42,
+    metalness: 0.7,
+  });
+  const gripMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2a1610,
+    roughness: 0.86,
+    metalness: 0.06,
+  });
+  const wrapMaterial = new THREE.MeshStandardMaterial({
+    color: 0x18100a,
+    roughness: 0.92,
+    metalness: 0.04,
+  });
+  const pommelMaterial = new THREE.MeshStandardMaterial({
+    color: 0xa5832e,
+    emissive: 0x3c2810,
+    emissiveIntensity: 0.18,
+    roughness: 0.4,
+    metalness: 0.7,
+  });
+
+  // Tapered blade — shape with a sharp tip at y=0 and broader at the top
+  const bladeShape = new THREE.Shape();
+  bladeShape.moveTo(0, 0);
+  bladeShape.lineTo(-0.045, 0.085);
+  bladeShape.lineTo(-0.062, 0.45);
+  bladeShape.lineTo(-0.066, 0.95);
+  bladeShape.lineTo(-0.07, 1.18);
+  bladeShape.lineTo(0.07, 1.18);
+  bladeShape.lineTo(0.066, 0.95);
+  bladeShape.lineTo(0.062, 0.45);
+  bladeShape.lineTo(0.045, 0.085);
+  bladeShape.lineTo(0, 0);
+
+  const bladeGeometry = new THREE.ExtrudeGeometry(bladeShape, {
+    depth: 0.024,
+    bevelEnabled: true,
+    bevelThickness: 0.008,
+    bevelSize: 0.008,
+    bevelSegments: 2,
+    curveSegments: 6,
+  });
+  bladeGeometry.translate(0, 0, -0.012);
+
+  const bladeMesh = new THREE.Mesh(bladeGeometry, bladeMaterial);
+  bladeMesh.castShadow = true;
+  bladeMesh.receiveShadow = true;
+  group.add(bladeMesh);
+
+  // Subtle fuller — a thin darker inset on each face
+  const fullerGeom = new THREE.PlaneGeometry(0.022, 0.84);
+  const fullerMat = new THREE.MeshStandardMaterial({
+    color: 0x6b7480,
+    roughness: 0.55,
+    metalness: 0.55,
+  });
+  const fullerFront = new THREE.Mesh(fullerGeom, fullerMat);
+  fullerFront.position.set(0, 0.62, 0.0125);
+  group.add(fullerFront);
+  const fullerBack = fullerFront.clone();
+  fullerBack.position.z = -0.0125;
+  fullerBack.rotation.y = Math.PI;
+  group.add(fullerBack);
+
+  // Crossguard — slight S-curve via two boxes
+  const guardCenter = new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.045, 0.072),
+    guardMaterial
+  );
+  guardCenter.position.y = 1.2;
+  guardCenter.castShadow = true;
+  group.add(guardCenter);
+
+  const guardCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.05, 0.07, 14),
+    guardMaterial
+  );
+  guardCap.rotation.z = Math.PI / 2;
+  guardCap.position.set(0, 1.2, 0);
+  guardCap.scale.set(1, 0.7, 1);
+  group.add(guardCap);
+
+  // Habaki / collar
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.034, 0.038, 0.05, 16),
+    pommelMaterial
+  );
+  collar.position.y = 1.235;
+  group.add(collar);
+
+  // Grip
+  const gripHeight = 0.2;
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.026, 0.029, gripHeight, 18),
+    gripMaterial
+  );
+  grip.position.y = 1.235 + gripHeight / 2 + 0.005;
+  grip.castShadow = true;
+  group.add(grip);
+
+  // Leather wrap as a series of rings
+  const ringCount = 5;
+  for (let i = 0; i < ringCount; i++) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.03, 0.005, 6, 14),
+      wrapMaterial
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = grip.position.y - gripHeight / 2 + 0.022 + i * (gripHeight - 0.04) / (ringCount - 1);
+    group.add(ring);
+  }
+
+  // Pommel
+  const pommel = new THREE.Mesh(
+    new THREE.SphereGeometry(0.044, 16, 12),
+    pommelMaterial
+  );
+  pommel.position.y = grip.position.y + gripHeight / 2 + 0.028;
+  pommel.scale.set(1, 0.85, 1);
+  pommel.castShadow = true;
+  group.add(pommel);
+
+  // Plaque label hovering above the sword
+  const plaqueTexture = createSwordPlaqueTexture(skillName);
+  const plaque = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: plaqueTexture,
+      transparent: true,
+      opacity: 0.94,
+      depthWrite: false,
+      depthTest: true,
+    })
+  );
+  const plaqueY = pommel.position.y + 0.34;
+  plaque.position.set(0, plaqueY, 0);
+  plaque.scale.set(1.05, 0.32, 1);
+  group.add(plaque);
+
+  // Faint glow halo behind the plaque
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: createRadialGlowTexture('rgba(255, 198, 96, 0.85)'),
+      color: 0xffb968,
+      transparent: true,
+      opacity: 0.32,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  halo.position.set(0, plaqueY, -0.01);
+  halo.scale.set(1.4, 0.72, 1);
+  group.add(halo);
+
+  // Small dust mound at the base — circular dark ring
+  const mound = new THREE.Mesh(
+    new THREE.CircleGeometry(0.18, 22),
+    new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+    })
+  );
+  mound.rotation.x = -Math.PI / 2;
+  mound.position.y = 0.005;
+  group.add(mound);
+
+  const phase = random() * Math.PI * 2;
+  group.userData = {
+    update: (t) => {
+      const shimmer = Math.sin(t * 1.4 + phase) * 0.04 + 0.96;
+      bladeMaterial.emissiveIntensity = 0.04 + 0.04 * Math.sin(t * 1.7 + phase);
+      plaque.material.opacity = 0.86 + 0.1 * Math.sin(t * 1.6 + phase);
+      halo.material.opacity = 0.26 + 0.12 * Math.sin(t * 1.6 + phase * 1.2);
+      halo.scale.set(1.4 * shimmer, 0.72 * shimmer, 1);
+    },
+  };
+
+  return group;
+}
+
+function createSwordPlaqueTexture(text) {
+  const w = 1024;
+  const h = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '600 92px "Cormorant Garamond", "Times New Roman", Georgia, serif';
+
+  ctx.shadowColor = 'rgba(255, 196, 92, 0.95)';
+  ctx.shadowBlur = 48;
+  ctx.fillStyle = 'rgba(255, 220, 130, 0.95)';
+  ctx.fillText(text, w / 2, h / 2);
+
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = '#fff1c8';
+  ctx.fillText(text, w / 2, h / 2);
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff8e6';
+  ctx.fillText(text, w / 2, h / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+function createFlameArrow(yaw, lean) {
+  const group = new THREE.Group();
+
+  const woodMaterial = new THREE.MeshStandardMaterial({
+    color: 0x6b4a2a,
+    emissive: 0x2a1808,
+    emissiveIntensity: 0.18,
+    roughness: 0.86,
+    metalness: 0.04,
+  });
+  const headMaterial = new THREE.MeshStandardMaterial({
+    color: 0x6a4928,
+    emissive: 0xff7a22,
+    emissiveIntensity: 0.85,
+    roughness: 0.36,
+    metalness: 0.65,
+  });
+  const fletchMaterial = new THREE.MeshStandardMaterial({
+    color: 0x6e3a1d,
+    side: THREE.DoubleSide,
+    roughness: 0.95,
+    metalness: 0,
+  });
+
+  // The arrow is built as if it were stuck point-down: shaft from y=0 upward,
+  // arrowhead+flame near the top. We then rotate the whole group so it leans.
+  const shaftHeight = 1.05;
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.013, shaftHeight, 10),
+    woodMaterial
+  );
+  shaft.position.y = shaftHeight / 2;
+  shaft.castShadow = true;
+  group.add(shaft);
+
+  // Arrowhead (triangular head a bit below the flame tip)
+  const head = new THREE.Mesh(
+    new THREE.ConeGeometry(0.034, 0.11, 10),
+    headMaterial
+  );
+  head.position.y = shaftHeight + 0.06;
+  head.castShadow = true;
+  group.add(head);
+
+  // A small heated rim where the head meets the shaft
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.018, 0.005, 8, 14),
+    headMaterial
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = shaftHeight + 0.005;
+  group.add(rim);
+
+  // Fletching — three angled feathers at the bottom (which is the back of the arrow)
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2;
+    const fletch = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.07, 0.16),
+      fletchMaterial
+    );
+    fletch.position.set(Math.cos(angle) * 0.02, 0.12, Math.sin(angle) * 0.02);
+    fletch.rotation.y = angle;
+    fletch.rotation.z = 0.18;
+    group.add(fletch);
+  }
+
+  // Nock at the very bottom
+  const nock = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.014, 0.014, 0.022, 8),
+    woodMaterial
+  );
+  nock.position.y = 0.011;
+  group.add(nock);
+
+  // Flame at the tip — additive sprites
+  const flameTexture = createGraceFlameTexture();
+  const flameGroup = new THREE.Group();
+  flameGroup.position.set(0, shaftHeight + 0.12, 0);
+
+  const wisps = [
+    { sx: 0.21, sy: 0.5, color: 0xff8a26, opacity: 0.96, phase: 0, speed: 1.5, offsetY: 0.1 },
+    { sx: 0.16, sy: 0.38, color: 0xffd054, opacity: 0.82, phase: 1.6, speed: 1.85, offsetY: 0.06 },
+    { sx: 0.11, sy: 0.26, color: 0xfff1b0, opacity: 0.66, phase: 3.1, speed: 2.2, offsetY: 0.0 },
+  ];
+  const flameSprites = [];
+  for (const w of wisps) {
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: flameTexture,
+        color: w.color,
+        transparent: true,
+        opacity: w.opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    sprite.position.set(0, w.offsetY, 0);
+    sprite.scale.set(w.sx, w.sy, 1);
+    sprite.userData = { ...w };
+    flameSprites.push(sprite);
+    flameGroup.add(sprite);
+  }
+  group.add(flameGroup);
+
+  // Outer warm halo so the flame casts a visible glow even where light doesn't reach
+  const haloSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: createRadialGlowTexture('rgba(255, 152, 64, 0.95)'),
+      color: 0xff8a36,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  haloSprite.position.copy(flameGroup.position);
+  haloSprite.scale.set(0.95, 0.95, 1);
+  group.add(haloSprite);
+
+  // Point light at the flame
+  const flameLight = new THREE.PointLight(0xff8a36, 4.6, 5.4, 1.7);
+  flameLight.position.set(0, shaftHeight + 0.18, 0);
+  flameLight.castShadow = false;
+  group.add(flameLight);
+
+  // Apply orientation: yaw around Y, lean around X (forward)
+  group.rotation.order = 'YXZ';
+  group.rotation.y = yaw;
+  group.rotation.x = -lean;
+
+  // Bury the tip (which sits at y=0 in local space) slightly into the ground
+  group.position.y = -0.05;
+
+  const flickerSeed = yaw * 11.3 + lean * 7.7;
+
+  return {
+    group,
+    light: flameLight,
+    sprites: flameSprites,
+    update: (t) => {
+      const flicker =
+        Math.sin(t * 7.2 + flickerSeed) * 0.35 +
+        Math.sin(t * 13.1 + flickerSeed * 0.6) * 0.18 +
+        Math.sin(t * 23.4 + flickerSeed * 0.3) * 0.08;
+      flameLight.intensity = 4.4 + flicker * 0.9;
+      haloSprite.material.opacity = 0.46 + flicker * 0.18;
+      const haloPulse = 1 + Math.sin(t * 3.4 + flickerSeed) * 0.08;
+      haloSprite.scale.set(0.95 * haloPulse, 0.95 * haloPulse, 1);
+
+      for (const s of flameSprites) {
+        const d = s.userData;
+        const wave = Math.sin(t * d.speed + d.phase);
+        s.scale.x = d.sx * (1 + Math.sin(t * 2.6 + d.phase) * 0.14);
+        s.scale.y = d.sy * (1 + Math.abs(wave) * 0.22);
+        s.material.opacity = d.opacity * (0.78 + 0.22 * Math.sin(t * 3.7 + d.phase));
+      }
+    },
+  };
 }

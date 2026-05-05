@@ -14,8 +14,8 @@ const regionContent = {
   About: {
     title: 'Isaac Hu',
     body: [
-      'A builder drawn to strange maps, elegant systems, and interfaces that feel quietly alive.',
-      'This portfolio is a small kingdom of experiments: code, craft, product instincts, and a stubborn fondness for making digital places feel inhabitable.',
+      'Someone who loves building new things and applying their skills to solve real problems, guided by a curiosity to observe, learn, and continuously improve.',
+      'This portfolio is a small kingdom of my experiences, projects, skills, and more. Inspired by Elden Ring.',
     ].join('\n\n'),
     metadata: 'The Tarnished',
   },
@@ -2172,11 +2172,11 @@ class SkillsScene extends RegionScene {
 const contactDetails = {
   title: 'Send Word',
   metadata: 'Roundtable Hold',
-  intro: 'Messages, collaborations, and quests welcome. The fastest way to reach me is below — every link opens in a new window.',
+  intro: 'Messages, collaborations, and quests welcome. The fastest way to reach me is below. Every link opens in a new window.',
   links: [
     { label: 'Email',    value: 'isaachu2004@gmail.com',     href: 'mailto:isaachu2004@gmail.com' },
     { label: 'GitHub',   value: 'github.com/IHu04',           href: 'https://github.com/IHu04' },
-    { label: 'LinkedIn', value: 'linkedin.com/in/isaac-hu',   href: 'https://www.linkedin.com/in/isaac-hu' },
+    { label: 'LinkedIn', value: 'linkedin.com/in/isaachu',   href: 'https://www.linkedin.com/in/isaac-hu-5229542b3/' },
   ],
 };
 
@@ -2745,34 +2745,19 @@ class ContactScene extends RegionScene {
 // Replace these placeholders with real history; structure is preserved.
 const experienceTimeline = [
   {
-    year: '2024',
-    title: 'Most Recent Role',
-    body: 'A short paragraph describing the work, the problem space, and what was learned. Update this stone with real details — the carving will follow.',
+    year: 'May 2026',
+    title: 'Amazon',
+    body: 'Incoming at Amazon as a Software Development Engineer Intern'
   },
   {
-    year: '2023',
-    title: 'Penultimate Chapter',
-    body: 'Each stone holds a season of work. Replace this with what you actually did, who you did it with, and why it mattered.',
+    year: 'Sep. 2025',
+    title: 'Ubisoft',
+    body: 'I worked on Rainbow Six Siege as an Online Programmer, focusing on client features in C++'
   },
   {
-    year: '2022',
-    title: 'A Founding Effort',
-    body: 'A side project or company-shaping initiative. Describe the constraints, the artifact, the outcome — the kind of details a recruiter or collaborator would want.',
-  },
-  {
-    year: '2021',
-    title: 'Earlier Campaign',
-    body: 'Lessons compounded here. Replace with the actual employer, role, scope of impact, and the technical surface you owned.',
-  },
-  {
-    year: '2020',
-    title: 'First Major Post',
-    body: 'The first real engineering role, or the formative project that set the direction. Keep this body 2–4 sentences for legibility on the stone overlay.',
-  },
-  {
-    year: '2018',
-    title: 'Origin · Internship',
-    body: 'Where it began — the internship, lab, or solo build that started the path. Brief, evocative, honest.',
+    year: 'May 2025',
+    title: 'Ross Video',
+    body: 'I worked on Carbonite Code as a Software Developer Intern, a production based switcher in C++'
   },
 ];
 
